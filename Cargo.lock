@@ -2514,6 +2514,7 @@ dependencies = [
  "surrealdb",
  "tikv-jemallocator",
  "tokio",
+ "wild",
 ]
 
 [[package]]
@@ -3135,6 +3136,15 @@ dependencies = [
  "either",
  "libc",
  "once_cell",
+]
+
+[[package]]
+name = "wild"
+version = "2.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "05b116685a6be0c52f5a103334cbff26db643826c7b3735fc0a3ba9871310a74"
+dependencies = [
+ "glob",
 ]
 
 [[package]]

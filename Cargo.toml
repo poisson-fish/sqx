@@ -15,6 +15,7 @@ log = "0.*"
 pretty_env_logger = "0.*"
 env_logger = "0.*"
 anyhow = "1.*"
+wild = "2.*"
 # database engine
 surrealdb = { git = "https://github.com/surrealdb/surrealdb.git", tag = "v1.0.0-beta.8", features = ["kv-mem"] }
 

@@ -3,9 +3,11 @@ extern crate pretty_env_logger;
 #[macro_use]
 extern crate log;
 
+use std::path::Path;
+
 use anyhow;
 
-use clap::{Arg, Command};
+use clap::{Arg, ArgGroup, Command};
 use log::LevelFilter;
 
 use surrealdb::Datastore;
@@ -25,6 +27,7 @@ async fn main() -> Result<(), anyhow::Error> {
         .version("0.1")
         .author("twin. <hyperViridian@gmail.com>")
         .about("A tool for filtering, selecting, querying, aggregating, or transforming any data with SurrealQL.")
+        .allow_hyphen_values(true)
         .arg(
             Arg::new("log-timestamp")
                 .short('t')
@@ -39,16 +42,16 @@ async fn main() -> Result<(), anyhow::Error> {
         )
         .arg(
             Arg::new("input-path")
-                .short('i')
-                .long("input-path")
-                .help("The path to the input file(s) or folder(s). Can take glob (*) paths and be specified multiple times.")
+                .help("The path to the input file(s) or folder(s). Can take recursive glob (*) paths.")
+                .last(true)
+                .num_args(0..)
                 .action(clap::ArgAction::Append),
         )
         .arg(
-            Arg::new("stdin")
+            Arg::new("no-stdin")
                 .short('s')
-                .long("stdin")
-                .help("Read input from stdin. This is the default input option if no input paths specified. If specified alongside -i, sqx will aggregate both inputs.")
+                .long("no-stdin")
+                .help("Will not read from stdin, for niche cases.")
                 .action(clap::ArgAction::Set),
         )
         .arg(
@@ -58,7 +61,7 @@ async fn main() -> Result<(), anyhow::Error> {
                 .help("The path to the output file.")
                 .action(clap::ArgAction::Set),
         )
-        .get_matches();
+        .get_matches_from(wild::args());
 
     //Match for verbosity level from args
     let verbosity = match matches.get_count("verbosity") {
@@ -85,9 +88,29 @@ async fn main() -> Result<(), anyhow::Error> {
 
     info!("Using debug logging level: [{}]", verbosity.1);
 
-    let _ds = Datastore::new("memory").await?;
-
+    // Spin up the database
+    let _ds = Datastore::new("memory").await?; // only in memory for now
     info!("In memory datastore initialized.");
+
+    // Calculate a list of all file input sources besides stdin taking into account glob paths
+    let input_files = if let Some(flags) = matches.get_many::<String>("input-path") {
+        let true_files = flags.filter_map(|str_path| {
+            let path = Path::new(str_path);
+            if path.is_file() {
+                return Some(path);
+            }
+            None
+        });
+        if log_enabled!(log::Level::Trace) {
+            true_files.clone().for_each(|path| {
+                trace!("Input path: {}", path.to_string_lossy());
+            });
+        }
+        Some(true_files)
+    } else {
+        trace!("Got no file paths :(");
+        None
+    };
 
     Ok(())
 }
