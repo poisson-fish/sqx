@@ -1,13 +1,20 @@
+mod converters;
+mod types;
+
 extern crate env_logger;
 extern crate pretty_env_logger;
 #[macro_use]
 extern crate log;
 
-use std::path::Path;
+use std::{
+    fmt::Debug,
+    io::{self, BufRead, BufReader, Read},
+    path::Path,
+};
 
 use anyhow;
 
-use clap::{Arg, ArgGroup, Command};
+use clap::{Arg, Command};
 use log::LevelFilter;
 
 use surrealdb::Datastore;
@@ -15,6 +22,8 @@ use surrealdb::Datastore;
 //Use jemalloc on *nix
 #[cfg(not(target_env = "msvc"))]
 use tikv_jemallocator::Jemalloc;
+
+use crate::types::ToSql;
 
 #[cfg(not(target_env = "msvc"))]
 #[global_allocator]
@@ -92,8 +101,8 @@ async fn main() -> Result<(), anyhow::Error> {
     let _ds = Datastore::new("memory").await?; // only in memory for now
     info!("In memory datastore initialized.");
 
-    // Calculate a list of all file input sources besides stdin taking into account glob paths
-    let input_files = if let Some(flags) = matches.get_many::<String>("input-path") {
+    // Iter of all file input sources besides stdin taking into account glob paths
+    /*let input_files = if let Some(flags) = matches.get_many::<String>("input-path") {
         let true_files = flags.filter_map(|str_path| {
             let path = Path::new(str_path);
             if path.is_file() {
@@ -110,7 +119,13 @@ async fn main() -> Result<(), anyhow::Error> {
     } else {
         trace!("Got no file paths :(");
         None
-    };
+    };*/
+    let stdin = io::stdin();
+    let mut handle = stdin.lock();
+    let buf_reader = BufReader::new(handle);
 
+    let deserialized: serde_json::Value = serde_json::from_reader(buf_reader).unwrap();
+    info!("Stdin got: {}", deserialized.clone());
+    info!("ToSql got: {:#?}", deserialized.to_sql()?);
     Ok(())
 }
