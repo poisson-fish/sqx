@@ -1,18 +1,11 @@
 mod converters;
-mod types;
 
 extern crate env_logger;
 extern crate pretty_env_logger;
 #[macro_use]
 extern crate log;
 
-use std::{
-    fmt::Debug,
-    io::{self, BufRead, BufReader, Read},
-    path::Path,
-};
-
-use anyhow;
+use std::io::{self, BufReader};
 
 use clap::{Arg, Command};
 use log::LevelFilter;
@@ -23,7 +16,7 @@ use surrealdb::Datastore;
 #[cfg(not(target_env = "msvc"))]
 use tikv_jemallocator::Jemalloc;
 
-use crate::types::ToSql;
+use crate::converters::json;
 
 #[cfg(not(target_env = "msvc"))]
 #[global_allocator]
@@ -77,9 +70,8 @@ async fn main() -> Result<(), anyhow::Error> {
         0 => (LevelFilter::Off, "none"),
         1 => (LevelFilter::Error, "error"),
         2 => (LevelFilter::Warn, "warn"),
-        3 => (LevelFilter::Debug, "info"),
-        4 => (LevelFilter::Trace, "debug"),
-        5 => (LevelFilter::Trace, "trace"),
+        3 => (LevelFilter::Debug, "debug"),
+        4 => (LevelFilter::Trace, "trace"),
         _ => (LevelFilter::Info, "info"),
     };
 
@@ -121,11 +113,12 @@ async fn main() -> Result<(), anyhow::Error> {
         None
     };*/
     let stdin = io::stdin();
-    let mut handle = stdin.lock();
+    let handle = stdin.lock();
     let buf_reader = BufReader::new(handle);
 
     let deserialized: serde_json::Value = serde_json::from_reader(buf_reader).unwrap();
     info!("Stdin got: {}", deserialized.clone());
-    info!("ToSql got: {:#?}", deserialized.to_sql()?);
+    json::jsonto_statement(&deserialized);
+    //info!("ToSql got: {:#?}", deserialized.to_sql()?);
     Ok(())
 }
