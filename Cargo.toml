@@ -17,9 +17,11 @@ env_logger = "0.*"
 anyhow = "1.*"
 wild = "2.*"
 csv = "1.*"
+json_value_merge = "1.*"
+uuid = { version = "1.2.*", features = ["v7"] }
 
 # database engine
-surrealdb = { git = "https://github.com/surrealdb/surrealdb.git", tag = "v1.0.0-beta.8", features = ["kv-mem"] }
+surrealdb = { path = "../surrealdb/lib", features = ["kv-mem"] }
 
 [target.'cfg(not(target_env = "msvc"))'.dependencies]
 tikv-jemallocator = "0.5.0"
@@ -27,4 +29,5 @@ tikv-jemallocator = "0.5.0"
 [profile.release]
 lto = true
 codegen-units = 1
+opt-level = 3
 debug = 0
