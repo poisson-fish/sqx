@@ -1,3 +1,5 @@
+mod helpers;
+
 extern crate env_logger;
 extern crate pretty_env_logger;
 #[macro_use]
@@ -14,9 +16,14 @@ use log::LevelFilter;
 use surrealdb::engine::local::Mem;
 use surrealdb::sql::statements::{BeginStatement, CommitStatement};
 use surrealdb::*;
+
+use indicatif::{ProgressBar, ProgressStyle};
+
 //Use jemalloc on *nix
 #[cfg(not(target_env = "msvc"))]
 use tikv_jemallocator::Jemalloc;
+
+use crate::helpers::value_to_table;
 
 #[cfg(not(target_env = "msvc"))]
 #[global_allocator]
@@ -50,10 +57,17 @@ async fn main() -> surrealdb::Result<()> {
                 .action(clap::ArgAction::Append),
         )
         .arg(
-            Arg::new("no-stdin")
-                .short('n')
-                .long("no-stdin")
-                .help("Will not read from stdin, for niche cases.")
+            Arg::new("input-format")
+                .short('F')
+                .long("if")
+                .help("Specify input format for data. Defaults to JSON. Valid options are JSON, TSV, CSV, ARROW, SYSLOG.")
+                .action(clap::ArgAction::Set),
+        )
+        .arg(
+            Arg::new("output-format")
+                .short('f')
+                .long("output-format")
+                .help("Specify input format for data. Defaults to TABLED graphical output. Valid options are JSON, TSV, CSV, ARROW, TABLED.")
                 .action(clap::ArgAction::Set),
         )
         .arg(
@@ -102,31 +116,33 @@ async fn main() -> surrealdb::Result<()> {
     info!("In memory datastore initialized.");
 
     // Iter of all file input sources besides stdin taking into account glob paths
-    let input_files = if let Some(flags) = matches.get_many::<String>("input-path") {
-        let true_files = flags.filter_map(|str_path| {
-            let path = Path::new(str_path);
-            if path.is_file() {
-                return Some(path);
-            }
-            None
-        });
+    if let Some(flags) = matches.get_many::<String>("input-path") {
+        let true_files: Vec<&Path> = flags
+            .filter_map(|str_path| {
+                let path = Path::new(str_path);
+                if path.is_file() {
+                    return Some(path);
+                }
+                None
+            })
+            .collect();
         if log_enabled!(log::Level::Trace) {
-            true_files.clone().for_each(|path| {
+            true_files.iter().for_each(|path| {
                 trace!("Input path: {}", path.to_string_lossy());
             });
         }
-        Some(true_files)
-    } else {
-        trace!("Got no file paths :(");
-        None
-    };
-    if let Some(file_map) = input_files {
         db.use_ns("namespace")
             .use_db("filein")
             .await
             .expect("Failed to change database to filein.");
-
-        for file in file_map {
+        let bar = ProgressBar::new(true_files.len().try_into().unwrap()).with_style(
+            ProgressStyle::with_template(
+                "[{elapsed_precise}] {bar:40.cyan/blue} {pos:>7}/{len:7} {msg}",
+            )
+            .unwrap()
+            .progress_chars("##-"),
+        );
+        for file in true_files {
             let handle = File::open(file)
                 .expect(format!("Could not open file: {:#?}", &file.to_path_buf()).as_str());
             let buf_reader = BufReader::new(handle);
@@ -143,8 +159,9 @@ async fn main() -> surrealdb::Result<()> {
                 .query(CommitStatement)
                 .await
                 .expect("DB Insertion failed");
+            bar.inc(1);
         }
-
+        bar.finish_with_message("done");
         if let Some(sql_statement) = matches.get_one::<String>("sql-query") {
             let mut response = db
                 // Start transaction
@@ -154,9 +171,10 @@ async fn main() -> surrealdb::Result<()> {
                 // Finalise
                 .query(CommitStatement)
                 .await?;
-            let responses: Vec<serde_json::Value> =
-                response.take(0).expect("Couldn't deserialize response.");
-            println!("{:#?}", responses);
+            let responses: serde_json::Value =
+                serde_json::Value::Array(response.take(0).expect("Couldn't deserialize response."));
+
+            println!("{}", value_to_table(responses).unwrap());
         } else {
             info!("No SQL string provided, selecting ALL from filein.");
             let mut response = db
@@ -168,11 +186,14 @@ async fn main() -> surrealdb::Result<()> {
                 // Finalise
                 .query(CommitStatement)
                 .await?;
-            let responses: Vec<serde_json::Value> =
-                response.take(0).expect("Couldn't deserialize response.");
-            println!("{:#?}", responses);
+            let responses: serde_json::Value =
+                serde_json::Value::Array(response.take(0).expect("Couldn't deserialize response."));
+
+            println!("{}", value_to_table(responses).unwrap());
         }
     } else {
+        //Stdin
+
         db.use_ns("namespace")
             .use_db("stdin")
             .await
@@ -182,10 +203,6 @@ async fn main() -> surrealdb::Result<()> {
         let buf_reader = BufReader::new(handle);
 
         let deserialized: serde_json::Value = serde_json::from_reader(buf_reader).unwrap();
-        //info!("Stdin got: {}", deserialized.clone());
-        //json::jsonto_statement(&deserialized);
-        //let mut str = String::new();
-        //buf_reader.read_to_string(&mut str).expect("cannot read string");
         let value = sql::json(&deserialized.to_string()).expect("STDIN JSON was malformed.");
         debug!("Surreal converted json to: {:#?}", value);
         let sql = surrealdb::sql! {
@@ -204,9 +221,10 @@ async fn main() -> surrealdb::Result<()> {
                 // Finalise
                 .query(CommitStatement)
                 .await?;
-            let responses: Vec<serde_json::Value> =
-                response.take(0).expect("Couldn't deserialize response.");
-            println!("{:#?}", responses);
+            let responses: serde_json::Value =
+                serde_json::Value::Array(response.take(0).expect("Couldn't deserialize response."));
+
+            println!("{}", value_to_table(responses).unwrap());
         } else {
             info!("No SQL string provided, selecting ALL from stdin.");
             let mut response = db
@@ -218,10 +236,12 @@ async fn main() -> surrealdb::Result<()> {
                 // Finalise
                 .query(CommitStatement)
                 .await?;
-            let responses: Vec<serde_json::Value> =
-                response.take(0).expect("Couldn't deserialize response.");
-            println!("{:#?}", responses);
+            let responses: serde_json::Value =
+                serde_json::Value::Array(response.take(0).expect("Couldn't deserialize response."));
+
+            println!("{}", value_to_table(responses).unwrap());
         }
-    }
+    };
+
     Ok(())
 }
