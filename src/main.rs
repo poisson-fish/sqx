@@ -3,8 +3,8 @@ extern crate pretty_env_logger;
 #[macro_use]
 extern crate log;
 
-use std::{io};
 use std::fs::File;
+use std::io;
 use std::io::BufReader;
 use std::path::Path;
 
@@ -121,7 +121,11 @@ async fn main() -> surrealdb::Result<()> {
         None
     };
     if let Some(file_map) = input_files {
-        db.use_ns("namespace").use_db("filein").await.expect("Failed to change database to filein.");
+        db.use_ns("namespace")
+            .use_db("filein")
+            .await
+            .expect("Failed to change database to filein.");
+
         for file in file_map {
             let handle = File::open(file)
                 .expect(format!("Could not open file: {:#?}", &file.to_path_buf()).as_str());
@@ -129,7 +133,7 @@ async fn main() -> surrealdb::Result<()> {
             let deserialized: serde_json::Value = serde_json::from_reader(buf_reader).unwrap();
             debug!("Surreal converted json to: {:#?}", deserialized);
 
-            let mut response = db
+            db
                 // Start transaction
                 .query(BeginStatement)
                 // Setup accounts
@@ -137,59 +141,87 @@ async fn main() -> surrealdb::Result<()> {
                 .bind(("obj", deserialized))
                 // Finalise
                 .query(CommitStatement)
-                .await.expect("DB Insertion failed");
+                .await
+                .expect("DB Insertion failed");
+        }
 
+        if let Some(sql_statement) = matches.get_one::<String>("sql-query") {
+            let mut response = db
+                // Start transaction
+                .query(BeginStatement)
+                // Setup accounts
+                .query(sql_statement)
+                // Finalise
+                .query(CommitStatement)
+                .await?;
             let responses: Vec<serde_json::Value> =
                 response.take(0).expect("Couldn't deserialize response.");
-            debug!("Query resulted in: {:#?}", responses);
-        };
-    }
-
-    db.use_ns("namespace").use_db("stdin").await.expect("Failed to change database to stdin.");
-    let stdin = io::stdin();
-    let handle = stdin.lock();
-    let buf_reader = BufReader::new(handle);
-
-    let deserialized: serde_json::Value = serde_json::from_reader(buf_reader).unwrap();
-    //info!("Stdin got: {}", deserialized.clone());
-    //json::jsonto_statement(&deserialized);
-    //let mut str = String::new();
-    //buf_reader.read_to_string(&mut str).expect("cannot read string");
-    let value = sql::json(&deserialized.to_string()).expect("STDIN JSON was malformed.");
-    debug!("Surreal converted json to: {:#?}", value);
-    let sql = surrealdb::sql! {
-        INSERT INTO stdin $obj
-    };
-
-    let results = db.query(sql).bind(("obj", value)).await?;
-    debug!("INSERT resulted in: {:#?}", results);
-
-    if let Some(sql_statement) = matches.get_one::<String>("sql-query") {
-        let mut response = db
-            // Start transaction
-            .query(BeginStatement)
-            // Setup accounts
-            .query(sql_statement)
-            // Finalise
-            .query(CommitStatement)
-            .await?;
-        let responses: Vec<serde_json::Value> =
-            response.take(0).expect("Couldn't deserialize response.");
-        println!("{:#?}", responses);
+            println!("{:#?}", responses);
+        } else {
+            info!("No SQL string provided, selecting ALL from filein.");
+            let mut response = db
+                // Start transaction
+                .query(BeginStatement)
+                // Setup accounts
+                .query("SELECT * FROM $table;")
+                .bind(("table", "filein"))
+                // Finalise
+                .query(CommitStatement)
+                .await?;
+            let responses: Vec<serde_json::Value> =
+                response.take(0).expect("Couldn't deserialize response.");
+            println!("{:#?}", responses);
+        }
     } else {
-        info!("No SQL string provided, selecting ALL from stdin.");
-        let mut response = db
-            // Start transaction
-            .query(BeginStatement)
-            // Setup accounts
-            .query("SELECT * FROM $table;")
-            .bind(("table", "stdin"))
-            // Finalise
-            .query(CommitStatement)
-            .await?;
-        let responses: Vec<serde_json::Value> =
-            response.take(0).expect("Couldn't deserialize response.");
-        println!("{:#?}", responses);
+        db.use_ns("namespace")
+            .use_db("stdin")
+            .await
+            .expect("Failed to change database to stdin.");
+        let stdin = io::stdin();
+        let handle = stdin.lock();
+        let buf_reader = BufReader::new(handle);
+
+        let deserialized: serde_json::Value = serde_json::from_reader(buf_reader).unwrap();
+        //info!("Stdin got: {}", deserialized.clone());
+        //json::jsonto_statement(&deserialized);
+        //let mut str = String::new();
+        //buf_reader.read_to_string(&mut str).expect("cannot read string");
+        let value = sql::json(&deserialized.to_string()).expect("STDIN JSON was malformed.");
+        debug!("Surreal converted json to: {:#?}", value);
+        let sql = surrealdb::sql! {
+            INSERT INTO stdin $obj
+        };
+
+        let results = db.query(sql).bind(("obj", value)).await?;
+        debug!("INSERT resulted in: {:#?}", results);
+
+        if let Some(sql_statement) = matches.get_one::<String>("sql-query") {
+            let mut response = db
+                // Start transaction
+                .query(BeginStatement)
+                // Setup accounts
+                .query(sql_statement)
+                // Finalise
+                .query(CommitStatement)
+                .await?;
+            let responses: Vec<serde_json::Value> =
+                response.take(0).expect("Couldn't deserialize response.");
+            println!("{:#?}", responses);
+        } else {
+            info!("No SQL string provided, selecting ALL from stdin.");
+            let mut response = db
+                // Start transaction
+                .query(BeginStatement)
+                // Setup accounts
+                .query("SELECT * FROM $table;")
+                .bind(("table", "stdin"))
+                // Finalise
+                .query(CommitStatement)
+                .await?;
+            let responses: Vec<serde_json::Value> =
+                response.take(0).expect("Couldn't deserialize response.");
+            println!("{:#?}", responses);
+        }
     }
     Ok(())
 }
