@@ -1,11 +1,9 @@
-mod converters;
-
 extern crate env_logger;
 extern crate pretty_env_logger;
 #[macro_use]
 extern crate log;
 
-use std::{fmt, io};
+use std::{io};
 use std::fs::File;
 use std::io::BufReader;
 use std::path::Path;

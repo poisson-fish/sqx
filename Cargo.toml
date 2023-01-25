@@ -17,8 +17,7 @@ env_logger = "0.*"
 anyhow = "1.*"
 wild = "2.*"
 csv = "1.*"
-json_value_merge = "1.*"
-uuid = { version = "1.2.*", features = ["v7"] }
+indicatif = "0.17.3"
 
 # database engine
 surrealdb = { path = "../surrealdb/lib", features = ["kv-mem"] }
