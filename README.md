@@ -100,7 +100,7 @@ SQX is a WIP tool to query, aggregate, filter, and convert structured data forma
 <!-- GETTING STARTED -->
 ## Getting Started
 
-Eventually I'll setup CI but for now you must build from source.
+Linux binaries can be found on the [Actions Page.](https://github.com/poisson-fish/sqx/actions)
 
 ### Prerequisites
 
