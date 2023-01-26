@@ -83,7 +83,7 @@
 
 <!-- [![Product Name Screen Shot][product-screenshot]](https://example.com) -->
 
-SQX is a WIP tool to query, aggregate, filter, and convert structured data formats on disk. Leveraging <a href="https://surrealdb.com/"><strong>SurrealDB's</strong></a> flexible in memory database gives SQX a 
+SQX is a WIP tool to query, aggregate, filter, and convert structured data formats on disk. Leveraging <a href="https://surrealdb.com/"><strong>SurrealDB's</strong></a> flexible in memory database allows the user to easily express complicated queries on current-gen datasets containing heavily nested and relational data.
 
 <p align="right">(<a href="#readme-top">back to top</a>)</p>
 
@@ -231,7 +231,7 @@ Big credit to SurrealDB for building the next generation database in Rust!
 
 
 <!-- MARKDOWN LINKS & IMAGES -->
-<!-- https://www.markdownguide.org/basic-syntax/#reference-style-links -->\
+<!-- https://www.markdownguide.org/basic-syntax/#reference-style-links -->
 [SurrealDB-Badge]: https://img.shields.io/badge/SurrealDB-FF00A0?logo=surrealdb&logoColor=fff&style=for-the-badge
 [surrealdb-url]: https://surrealdb.com/
 [Rust]: https://img.shields.io/badge/rust-B94700?style=for-the-badge&logo=rust&logoColor=white
