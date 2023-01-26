@@ -139,6 +139,23 @@ To query on stdin use the 'stdin' table:
 ```sh
 ps auxw | jc --ps | ./sqx -s "SELECT command,mem_percent FROM stdin ORDER BY mem_percent DESC LIMIT 10;"
 ```
+Gives:
+```
+╭──────────────────────────────────┬─────────────╮
+│ command                          │ mem_percent │
+├──────────────────────────────────┼─────────────┤
+│ "/home/twin/.vscode-server/exten │ "2.6"       │
+│ "/home/twin/.vscode-server/bin/9 │ "0.2"       │
+│ "/home/twin/.vscode-server/bin/9 │ "0.1"       │
+│ "/home/twin/.vscode-server/bin/9 │ "0.1"       │
+│ "/home/twin/.vscode-server/bin/9 │ "0.1"       │
+│ "./sqx -s SELECT command,mem_per │ "0.0"       │
+│ "/usr/lib/systemd/systemd-journa │ "0.0"       │
+│ "/usr/bin/dbus-daemon --system - │ "0.0"       │
+│ "/home/twin/.vscode-server/bin/9 │ "0.0"       │
+│ "/usr/bin/zsh -i"                │ "0.0"       │
+╰──────────────────────────────────┴─────────────╯
+```
 
 To query on file input you use the 'filein' table.
 Specify a space separated list of file blobs with an options postfixed double dash:
