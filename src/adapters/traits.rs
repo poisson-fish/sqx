@@ -1,12 +1,42 @@
-use anyhow::{Error, bail};
+
+
+use anyhow::{bail, Error};
 use tabled::{builder::Builder, object::{Rows, Segment}, Alignment, ModifyObject, Style, Width, Modify};
 
-pub fn value_to_table(json: serde_json::Value) -> Result<String, Error> {
+pub enum FormatOption {
+    JSON,
+    CSV,
+    TSV,
+    ARROW,
+    TABLED,
+}
+
+pub trait Structured {
+    fn format_to_string(&self, fmt: FormatOption) -> String;
+}
+
+impl Structured for serde_json::Value {
+    fn format_to_string(&self, fmt: FormatOption) -> String {
+        match fmt {
+            FormatOption::JSON => self.to_string(),
+            FormatOption::CSV => todo!(),
+            FormatOption::TSV => todo!(),
+            FormatOption::ARROW => todo!(),
+            FormatOption::TABLED => {
+                value_to_table(self)
+                    .expect("Displaying the tabled failed.")
+            }
+        }
+    }
+}
+
+
+pub fn value_to_table(json: &serde_json::Value) -> Result<String, Error> {
     match json {
         serde_json::Value::Array(arr) => {
             let mut builder = Builder::default();
 
-            for (i, row) in arr.iter().enumerate() {
+            for row in arr {
                 let mut column_build = vec![];
                 match row {
                     serde_json::Value::Null => todo!(),
@@ -19,7 +49,7 @@ pub fn value_to_table(json: serde_json::Value) -> Result<String, Error> {
                         let columns = object_to_row.keys();
                         builder.set_columns(columns);
                         
-                        for (k,v) in object_to_row {
+                        for (_,v) in object_to_row {
                             column_build.push(v.to_string());
                         }
                     }

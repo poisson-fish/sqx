@@ -1,4 +1,6 @@
-mod helpers;
+pub mod adapters;
+
+use adapters::traits::{FormatOption, Structured};
 
 extern crate env_logger;
 extern crate pretty_env_logger;
@@ -22,8 +24,6 @@ use indicatif::{ProgressBar, ProgressStyle};
 //Use jemalloc on *nix
 #[cfg(not(target_env = "msvc"))]
 use tikv_jemallocator::Jemalloc;
-
-use crate::helpers::value_to_table;
 
 #[cfg(not(target_env = "msvc"))]
 #[global_allocator]
@@ -58,29 +58,57 @@ async fn main() -> surrealdb::Result<()> {
         )
         .arg(
             Arg::new("input-format")
-                .short('F')
-                .long("if")
+                .short('i')
+                .long("input-format")
                 .help("Specify input format for data. Defaults to JSON. Valid options are JSON, TSV, CSV, ARROW, SYSLOG.")
                 .action(clap::ArgAction::Set),
         )
         .arg(
-            Arg::new("output-format")
-                .short('f')
-                .long("output-format")
-                .help("Specify input format for data. Defaults to TABLED graphical output. Valid options are JSON, TSV, CSV, ARROW, TABLED.")
+            Arg::new("stdout-format")
+                .short('F')
+                .long("stdout-format")
+                .help("Specify output format for data going to stdout. Defaults to TABLED graphical output. Valid options are JSON, TSV, CSV, ARROW, TABLED.")
                 .action(clap::ArgAction::Set),
         )
         .arg(
-            Arg::new("output-file")
+            Arg::new("fileout-format")
+                .short('f')
+                .long("fileout-format")
+                .help("Specify output format for data going to output file(s). Defaults to TABLED graphical output. Valid options are JSON, TSV, CSV, ARROW, TABLED.")
+                .action(clap::ArgAction::Set),
+        )
+        .arg(
+            Arg::new("split")
+                .short('S')
+                .long("fileout-split")
+                .help("Specify a number of lines per file to split on.")
+                .action(clap::ArgAction::Set),
+        )
+        .arg(
+            Arg::new("fileout-path")
                 .short('o')
-                .long("of")
+                .long("fileout-path")
                 .help("The path to the output file.")
                 .action(clap::ArgAction::Set),
         )
         .arg(
-            Arg::new("sql-query")
+            Arg::new("stdout-pretty-print")
+                .short('p')
+                .long("stdout-pretty-print")
+                .help("If specified this flag will enable stdout pretty printing.")
+                .action(clap::ArgAction::SetTrue),
+        )
+        .arg(
+            Arg::new("fileout-pretty-print")
+                .short('P')
+                .long("fileout-pretty-print")
+                .help("If specified this flag will enable fileout pretty printing.")
+                .action(clap::ArgAction::SetTrue),
+        )
+        .arg(
+            Arg::new("query-string")
                 .short('s')
-                .long("sql-query")
+                .long("query-string")
                 .help("A SurrealQL query to run against the data.")
                 .action(clap::ArgAction::Set),
         )
@@ -102,6 +130,21 @@ async fn main() -> surrealdb::Result<()> {
         _ => pretty_env_logger::formatted_timed_builder(),
     };
 
+    let get_format_option = |id: &str, default: FormatOption| match matches.get_one::<String>(id) {
+        Some(value) => match value.as_str() {
+            "JSON" => FormatOption::JSON,
+            "CSV" => FormatOption::CSV,
+            "TSV" => FormatOption::TSV,
+            "ARROW" => FormatOption::ARROW,
+            "TABLED" => FormatOption::TABLED,
+            _ => default,
+        },
+        None => default,
+    };
+    let stdout_format = get_format_option("stdout-format", FormatOption::TABLED);
+
+    let _fileout_format = get_format_option("fileout-format", FormatOption::JSON);
+
     //Spin up logger
     builder
         .filter_level(verbosity.0)
@@ -117,6 +160,11 @@ async fn main() -> surrealdb::Result<()> {
 
     // Iter of all file input sources besides stdin taking into account glob paths
     if let Some(flags) = matches.get_many::<String>("input-path") {
+        // We got input files
+        db.use_ns("namespace")
+            .use_db("filein")
+            .await
+            .expect("Failed to change database to filein.");
         let true_files: Vec<&Path> = flags
             .filter_map(|str_path| {
                 let path = Path::new(str_path);
@@ -131,10 +179,7 @@ async fn main() -> surrealdb::Result<()> {
                 trace!("Input path: {}", path.to_string_lossy());
             });
         }
-        db.use_ns("namespace")
-            .use_db("filein")
-            .await
-            .expect("Failed to change database to filein.");
+
         let bar = ProgressBar::new(true_files.len().try_into().unwrap()).with_style(
             ProgressStyle::with_template(
                 "[{elapsed_precise}] {bar:40.cyan/blue} {pos:>7}/{len:7} {msg}",
@@ -162,7 +207,7 @@ async fn main() -> surrealdb::Result<()> {
             bar.inc(1);
         }
         bar.finish_with_message("done");
-        if let Some(sql_statement) = matches.get_one::<String>("sql-query") {
+        if let Some(sql_statement) = matches.get_one::<String>("query-string") {
             let mut response = db
                 // Start transaction
                 .query(BeginStatement)
@@ -174,7 +219,7 @@ async fn main() -> surrealdb::Result<()> {
             let responses: serde_json::Value =
                 serde_json::Value::Array(response.take(0).expect("Couldn't deserialize response."));
 
-            println!("{}", value_to_table(responses).unwrap());
+            println!("{}", responses.format_to_string(stdout_format));
         } else {
             info!("No SQL string provided, selecting ALL from filein.");
             let mut response = db
@@ -189,7 +234,7 @@ async fn main() -> surrealdb::Result<()> {
             let responses: serde_json::Value =
                 serde_json::Value::Array(response.take(0).expect("Couldn't deserialize response."));
 
-            println!("{}", value_to_table(responses).unwrap());
+            println!("{}", responses.format_to_string(stdout_format));
         }
     } else {
         //Stdin
@@ -212,7 +257,7 @@ async fn main() -> surrealdb::Result<()> {
         let results = db.query(sql).bind(("obj", value)).await?;
         debug!("INSERT resulted in: {:#?}", results);
 
-        if let Some(sql_statement) = matches.get_one::<String>("sql-query") {
+        if let Some(sql_statement) = matches.get_one::<String>("query-string") {
             let mut response = db
                 // Start transaction
                 .query(BeginStatement)
@@ -221,10 +266,11 @@ async fn main() -> surrealdb::Result<()> {
                 // Finalise
                 .query(CommitStatement)
                 .await?;
+
             let responses: serde_json::Value =
                 serde_json::Value::Array(response.take(0).expect("Couldn't deserialize response."));
 
-            println!("{}", value_to_table(responses).unwrap());
+            println!("{}", responses.format_to_string(stdout_format));
         } else {
             info!("No SQL string provided, selecting ALL from stdin.");
             let mut response = db
@@ -239,7 +285,7 @@ async fn main() -> surrealdb::Result<()> {
             let responses: serde_json::Value =
                 serde_json::Value::Array(response.take(0).expect("Couldn't deserialize response."));
 
-            println!("{}", value_to_table(responses).unwrap());
+            println!("{}", responses.format_to_string(stdout_format));
         }
     };
 
