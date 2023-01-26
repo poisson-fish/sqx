@@ -23,7 +23,6 @@
 [![Stargazers][stars-shield]][stars-url]
 [![Issues][issues-shield]][issues-url]
 [![MIT License][license-shield]][license-url]
-[![LinkedIn][linkedin-shield]][linkedin-url]
 
 
 
@@ -253,18 +252,16 @@ Big credit to SurrealDB for building the next generation database in Rust!
 [surrealdb-url]: https://surrealdb.com/
 [Rust]: https://img.shields.io/badge/rust-B94700?style=for-the-badge&logo=rust&logoColor=white
 [rust-url]: https://www.rust-lang.org/
-[contributors-shield]: https://img.shields.io/github/contributors/othneildrew/Best-README-Template.svg?style=for-the-badge
-[contributors-url]: https://github.com/othneildrew/Best-README-Template/graphs/contributors
-[forks-shield]: https://img.shields.io/github/forks/othneildrew/Best-README-Template.svg?style=for-the-badge
-[forks-url]: https://github.com/othneildrew/Best-README-Template/network/members
-[stars-shield]: https://img.shields.io/github/stars/othneildrew/Best-README-Template.svg?style=for-the-badge
-[stars-url]: https://github.com/othneildrew/Best-README-Template/stargazers
-[issues-shield]: https://img.shields.io/github/issues/othneildrew/Best-README-Template.svg?style=for-the-badge
-[issues-url]: https://github.com/othneildrew/Best-README-Template/issues
-[license-shield]: https://img.shields.io/github/license/othneildrew/Best-README-Template.svg?style=for-the-badge
-[license-url]: https://github.com/othneildrew/Best-README-Template/blob/master/LICENSE.txt
-[linkedin-shield]: https://img.shields.io/badge/-LinkedIn-black.svg?style=for-the-badge&logo=linkedin&colorB=555
-[linkedin-url]: https://linkedin.com/in/othneildrew
+[contributors-shield]: https://img.shields.io/github/contributors/poisson-fish/sqx.svg?style=for-the-badge
+[contributors-url]: https://github.com/poisson-fish/sqx/graphs/contributors
+[forks-shield]: https://img.shields.io/github/forks/poisson-fish/sqx.svg?style=for-the-badge
+[forks-url]: https://github.com/poisson-fish/sqx/network/members
+[stars-shield]: https://img.shields.io/github/stars/poisson-fish/sqx.svg?style=for-the-badge
+[stars-url]: https://github.com/poisson-fish/sqx/stargazers
+[issues-shield]: https://img.shields.io/github/issues/poisson-fish/sqx.svg?style=for-the-badge
+[issues-url]: https://github.com/poisson-fish/sqx/issues
+[license-shield]: https://img.shields.io/github/license/poisson-fish/sqx.svg?style=for-the-badge
+[license-url]: https://github.com/poisson-fish/sqx/blob/master/LICENSE.txt
 [product-screenshot]: images/screenshot.png
 [Next.js]: https://img.shields.io/badge/next.js-000000?style=for-the-badge&logo=nextdotjs&logoColor=white
 [Next-url]: https://nextjs.org/
