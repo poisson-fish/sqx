@@ -135,13 +135,13 @@ https://rustup.rs/
 * SQX only outputs in visual table format for now, both input and output format flags do nothing. 
 * SQX takes quoted SurrealQL queries with the -s flag.
 
-To query on stdin use the stdin table:
+To query on stdin use the 'stdin' table:
 ```sh
 ps auxw | jc --ps | ./sqx -s "SELECT command,mem_percent FROM stdin ORDER BY mem_percent DESC LIMIT 10;"
 ```
 
 To query on file input you use the 'filein' table.
-Specify a space separated list of file blobs with a options postfixed double dash:
+Specify a space separated list of file blobs with an options postfixed double dash:
 ```sh
 ./sqx -vv -s "SELECT * FROM filein;" -- testdata/* 
 ```
