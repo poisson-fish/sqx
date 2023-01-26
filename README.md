@@ -131,8 +131,8 @@ https://rustup.rs/
 
 (WIP)
 * SQX is in infant stages and functionality is limited (for now!!)
-* SQX can ingest only JSON via stdin or file blob for now, more formats to come (CSV, TSV, Apache Arrow via Pola.rs) .
-* SQX only outputs in visual table format for now, both input and output format flags do nothing. 
+* SQX can ingest only JSON via stdin or file blob, more formats to come (CSV, TSV, Apache Arrow via Pola.rs) .
+* SQX only outputs in visual table format, both input and output format flags do nothing. 
 * SQX takes quoted SurrealQL queries with the -s flag.
 
 To query on stdin use the 'stdin' table:
