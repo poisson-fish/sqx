@@ -169,7 +169,7 @@ _For more specific and powerful query language examples, please refer to the [Su
     - [ ] Arrow
     - [ ] SQL
     - [x] Tabled
-- [-] Tables
+- [ ] Tables
     - [x] Basic table view
     - [ ] Optional
 - [ ] Tests
