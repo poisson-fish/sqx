@@ -1,6 +1,6 @@
-pub mod adapters;
+pub mod traits;
 
-use adapters::traits::{FormatOption, Structured};
+use traits::structured::{FormatOption, Structured};
 
 extern crate env_logger;
 extern crate pretty_env_logger;
@@ -142,8 +142,8 @@ async fn main() -> surrealdb::Result<()> {
         None => default,
     };
     let stdout_format = get_format_option("stdout-format", FormatOption::TABLED);
-
     let _fileout_format = get_format_option("fileout-format", FormatOption::JSON);
+    let input_format = get_format_option("input-format", FormatOption::JSON);
 
     //Spin up logger
     builder
@@ -211,7 +211,7 @@ async fn main() -> surrealdb::Result<()> {
             let mut response = db
                 // Start transaction
                 .query(BeginStatement)
-                // Setup accounts
+                // Insert statement
                 .query(sql_statement)
                 // Finalise
                 .query(CommitStatement)
@@ -219,13 +219,18 @@ async fn main() -> surrealdb::Result<()> {
             let responses: serde_json::Value =
                 serde_json::Value::Array(response.take(0).expect("Couldn't deserialize response."));
 
-            println!("{}", responses.format_to_string(stdout_format));
+            println!(
+                "{}",
+                responses
+                    .format_to_string(stdout_format)
+                    .unwrap_or(String::from("Couldn't generate response string."))
+            );
         } else {
             info!("No SQL string provided, selecting ALL from filein.");
             let mut response = db
                 // Start transaction
                 .query(BeginStatement)
-                // Setup accounts
+                // Default Query
                 .query("SELECT * FROM $table;")
                 .bind(("table", "filein"))
                 // Finalise
@@ -234,7 +239,12 @@ async fn main() -> surrealdb::Result<()> {
             let responses: serde_json::Value =
                 serde_json::Value::Array(response.take(0).expect("Couldn't deserialize response."));
 
-            println!("{}", responses.format_to_string(stdout_format));
+            println!(
+                "{}",
+                responses
+                    .format_to_string(stdout_format)
+                    .unwrap_or(String::from("Couldn't generate response string."))
+            );
         }
     } else {
         //Stdin
@@ -261,7 +271,7 @@ async fn main() -> surrealdb::Result<()> {
             let mut response = db
                 // Start transaction
                 .query(BeginStatement)
-                // Setup accounts
+                // Begin statement
                 .query(sql_statement)
                 // Finalise
                 .query(CommitStatement)
@@ -270,13 +280,18 @@ async fn main() -> surrealdb::Result<()> {
             let responses: serde_json::Value =
                 serde_json::Value::Array(response.take(0).expect("Couldn't deserialize response."));
 
-            println!("{}", responses.format_to_string(stdout_format));
+            println!(
+                "{}",
+                responses
+                    .format_to_string(stdout_format)
+                    .unwrap_or(String::from("Couldn't generate response string."))
+            );
         } else {
             info!("No SQL string provided, selecting ALL from stdin.");
             let mut response = db
                 // Start transaction
                 .query(BeginStatement)
-                // Setup accounts
+                // Default query
                 .query("SELECT * FROM $table;")
                 .bind(("table", "stdin"))
                 // Finalise
@@ -285,7 +300,12 @@ async fn main() -> surrealdb::Result<()> {
             let responses: serde_json::Value =
                 serde_json::Value::Array(response.take(0).expect("Couldn't deserialize response."));
 
-            println!("{}", responses.format_to_string(stdout_format));
+            println!(
+                "{}",
+                responses
+                    .format_to_string(stdout_format)
+                    .unwrap_or(String::from("Generating string failed."))
+            );
         }
     };
 

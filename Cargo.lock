@@ -1957,7 +1957,7 @@ checksum = "6bdef32e8150c2a081110b42772ffe7d7c9032b606bc226c8260fd97e0976601"
 [[package]]
 name = "surrealdb"
 version = "1.0.0-beta.8"
-source = "git+https://github.com/poisson-fish/surrealdb?branch=twins-fixes#d23ae7a18cc3652b2a977b2c9164161c525511e3"
+source = "git+https://github.com/surrealdb/surrealdb#3f528ab183fdde4add9cb8dd200d4e6085a755e7"
 dependencies = [
  "addr",
  "argon2",

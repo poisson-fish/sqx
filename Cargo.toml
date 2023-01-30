@@ -19,7 +19,8 @@ wild = "2.*"
 indicatif = "0.17.3"
 tabled = "0.10.0"
 # database engine
-surrealdb = { git = "https://github.com/poisson-fish/surrealdb", branch = "twins-fixes", features = ["kv-mem"] }
+surrealdb = { git = "https://github.com/surrealdb/surrealdb", features = ["kv-mem"] }
+
 
 [target.'cfg(not(target_env = "msvc"))'.dependencies]
 tikv-jemallocator = "0.5.0"
