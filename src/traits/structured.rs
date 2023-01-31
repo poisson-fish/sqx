@@ -1,6 +1,7 @@
 use super::tabled::Tabled;
 use anyhow::Error;
 
+#[derive(Debug)]
 pub enum FormatOption {
     JSON,
     CSV,

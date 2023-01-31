@@ -16,8 +16,11 @@ pretty_env_logger = "0.*"
 env_logger = "0.*"
 anyhow = "1.*"
 wild = "2.*"
-indicatif = "0.17.3"
-tabled = "0.10.0"
+indicatif = "0.17.*"
+tabled = "0.10.*"
+serde-transcode = "1.1.*"
+polars = { version = "0.26.*", features = ["lazy", "serde"] }
+polars-io = { version = "0.26.*", features = ["json", "serde"] }
 # database engine
 surrealdb = { git = "https://github.com/surrealdb/surrealdb", features = ["kv-mem"] }
 

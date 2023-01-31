@@ -1,5 +1,8 @@
 pub mod traits;
 
+use polars::prelude::*;
+
+use serde_json::Value;
 use traits::structured::{FormatOption, Structured};
 
 extern crate env_logger;
@@ -9,7 +12,10 @@ extern crate log;
 
 use std::fs::File;
 use std::io;
+use std::io::BufRead;
 use std::io::BufReader;
+use std::io::Cursor;
+use std::io::StdinLock;
 use std::path::Path;
 
 use clap::{Arg, Command};
@@ -30,7 +36,7 @@ use tikv_jemallocator::Jemalloc;
 static GLOBAL: Jemalloc = Jemalloc;
 
 #[tokio::main]
-async fn main() -> surrealdb::Result<()> {
+async fn main() -> anyhow::Result<()> {
     //Command line args
     let matches = Command::new("sqx")
         .version("0.1")
@@ -61,6 +67,20 @@ async fn main() -> surrealdb::Result<()> {
                 .short('i')
                 .long("input-format")
                 .help("Specify input format for data. Defaults to JSON. Valid options are JSON, TSV, CSV, ARROW, SYSLOG.")
+                .action(clap::ArgAction::Set),
+        )
+        .arg(
+            Arg::new("input-delimiter")
+                .short('d')
+                .long("input-delimiter")
+                .help("Specify delimiter for input data with input-format=CSV. Defaults to ','. Ignored with any other input format.")
+                .action(clap::ArgAction::Set),
+        )
+        .arg(
+            Arg::new("output-delimiter")
+                .short('D')
+                .long("output-delimiter")
+                .help("Specify delimiter for output data with *out-format=CSV. Defaults to ','. Ignored with any other output format.")
                 .action(clap::ArgAction::Set),
         )
         .arg(
@@ -142,9 +162,12 @@ async fn main() -> surrealdb::Result<()> {
         None => default,
     };
     let stdout_format = get_format_option("stdout-format", FormatOption::TABLED);
-    let _fileout_format = get_format_option("fileout-format", FormatOption::JSON);
+    let fileout_format = get_format_option("fileout-format", FormatOption::JSON);
     let input_format = get_format_option("input-format", FormatOption::JSON);
-
+    info!(
+        "File Input format is {:#?}, Stdin format is {:#?}, output format {:#?}",
+        fileout_format, input_format, stdout_format
+    );
     //Spin up logger
     builder
         .filter_level(verbosity.0)
@@ -165,6 +188,7 @@ async fn main() -> surrealdb::Result<()> {
             .use_db("filein")
             .await
             .expect("Failed to change database to filein.");
+
         let true_files: Vec<&Path> = flags
             .filter_map(|str_path| {
                 let path = Path::new(str_path);
@@ -174,6 +198,7 @@ async fn main() -> surrealdb::Result<()> {
                 None
             })
             .collect();
+
         if log_enabled!(log::Level::Trace) {
             true_files.iter().for_each(|path| {
                 trace!("Input path: {}", path.to_string_lossy());
@@ -187,17 +212,19 @@ async fn main() -> surrealdb::Result<()> {
             .unwrap()
             .progress_chars("##-"),
         );
+
         for file in true_files {
             let handle = File::open(file)
                 .expect(format!("Could not open file: {:#?}", &file.to_path_buf()).as_str());
             let buf_reader = BufReader::new(handle);
+
             let deserialized: serde_json::Value = serde_json::from_reader(buf_reader).unwrap();
             debug!("Surreal converted json to: {:#?}", deserialized);
 
             db
                 // Start transaction
                 .query(BeginStatement)
-                // Setup accounts
+                // Insert input data
                 .query("INSERT INTO filein $obj;")
                 .bind(("obj", deserialized))
                 // Finalise
@@ -216,6 +243,7 @@ async fn main() -> surrealdb::Result<()> {
                 // Finalise
                 .query(CommitStatement)
                 .await?;
+
             let responses: serde_json::Value =
                 serde_json::Value::Array(response.take(0).expect("Couldn't deserialize response."));
 
@@ -236,6 +264,7 @@ async fn main() -> surrealdb::Result<()> {
                 // Finalise
                 .query(CommitStatement)
                 .await?;
+
             let responses: serde_json::Value =
                 serde_json::Value::Array(response.take(0).expect("Couldn't deserialize response."));
 
@@ -253,13 +282,65 @@ async fn main() -> surrealdb::Result<()> {
             .use_db("stdin")
             .await
             .expect("Failed to change database to stdin.");
+
+    
+
+        let csv_parse = |handle: StdinLock, delim_override: Option<char>| -> Value {
+            let mut buf_reader = BufReader::new(handle);
+            let buf_bytes = buf_reader.fill_buf().unwrap();
+            let mmap = Cursor::new(buf_bytes);
+            if let Some(delim_over) = delim_override {
+                let df: DataFrame = CsvReader::new(mmap)
+                        .with_delimiter(delim_over as u8)
+                        .has_header(true)
+                        .finish()
+                        .expect(format!("Could not parse CSV with delimiter '{}' into DataFrame", delim_over).as_str());
+                    let result = serde_json::to_value(df)
+                        .expect("Converting DataFrame to serde_json::Value failed.");
+                    debug!("DataFrame read to {:#?}", result);
+                    result
+            } else {
+                if let Some(delimiter) = matches.get_one::<String>("input-delimiter") {
+                    let delim = delimiter.chars().next().unwrap();
+                    let df: DataFrame = CsvReader::new(mmap)
+                        .with_delimiter(delim as u8)
+                        .has_header(true)
+                        .finish()
+                        .expect(format!("Could not parse CSV with delimiter '{}' into DataFrame", delim).as_str());
+                    let result = serde_json::to_value(df)
+                        .expect("Converting DataFrame to serde_json::Value failed.");
+                    debug!("DataFrame read to {:#?}", result);
+                    result
+                } else {
+                    let df: DataFrame = CsvReader::new(mmap)
+                        .finish()
+                        .expect("Could not parse CSV with delimiter ',' into DataFrame");
+                    let result = serde_json::to_value(df)
+                        .expect("Converting DataFrame to serde_json::Value failed.");
+                    debug!("DataFrame read to {:#?}", result);
+                    result
+                }
+            }
+        };
+
         let stdin = io::stdin();
         let handle = stdin.lock();
-        let buf_reader = BufReader::new(handle);
 
-        let deserialized: serde_json::Value = serde_json::from_reader(buf_reader).unwrap();
-        let value = sql::json(&deserialized.to_string()).expect("STDIN JSON was malformed.");
+        let value: Value = match input_format {
+            FormatOption::JSON => {
+                let buf_reader = BufReader::new(handle);
+                serde_json::from_reader(buf_reader).unwrap()
+            }
+
+            FormatOption::CSV => csv_parse(handle, None),
+
+            FormatOption::TSV => csv_parse(handle, Some('\t')),
+            FormatOption::ARROW => todo!(),
+            FormatOption::TABLED => todo!(),
+        };
+
         debug!("Surreal converted json to: {:#?}", value);
+
         let sql = surrealdb::sql! {
             INSERT INTO stdin $obj
         };
@@ -297,6 +378,7 @@ async fn main() -> surrealdb::Result<()> {
                 // Finalise
                 .query(CommitStatement)
                 .await?;
+
             let responses: serde_json::Value =
                 serde_json::Value::Array(response.take(0).expect("Couldn't deserialize response."));
 
