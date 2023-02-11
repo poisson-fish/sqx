@@ -2,7 +2,6 @@ pub mod converters;
 pub mod traits;
 
 use serde_json::Value;
-use traits::structured::{FormatOption, Structured};
 
 extern crate env_logger;
 extern crate pretty_env_logger;
@@ -28,7 +27,7 @@ use indicatif::{ProgressBar, ProgressStyle};
 use tikv_jemallocator::Jemalloc;
 
 use crate::converters::csv_parse;
-use crate::traits::ser_adapter::SerOutputAdapter;
+use crate::traits::ser_adapter::{FormatOption, FromSerde, ParseSerde};
 
 #[cfg(not(target_env = "msvc"))]
 #[global_allocator]
@@ -217,7 +216,7 @@ async fn main() -> anyhow::Result<()> {
                 .expect(format!("Could not open file: {:#?}", &file.to_path_buf()).as_str());
             let mut buf_reader = BufReader::new(handle);
 
-            let deserialized: serde_json::Value = buf_reader.parse_as(&input_format).unwrap();
+            let deserialized: serde_json::Value = buf_reader.parse_serde(&input_format).unwrap();
             debug!("Surreal converted json to: {:#?}", deserialized);
 
             db
@@ -249,7 +248,7 @@ async fn main() -> anyhow::Result<()> {
             println!(
                 "{}",
                 responses
-                    .format_to_string(stdout_format)
+                    .to_format_option(&stdout_format)
                     .unwrap_or(String::from("Couldn't generate response string."))
             );
         } else {
@@ -270,7 +269,7 @@ async fn main() -> anyhow::Result<()> {
             println!(
                 "{}",
                 responses
-                    .format_to_string(stdout_format)
+                    .to_format_option(&stdout_format)
                     .unwrap_or(String::from("Couldn't generate response string."))
             );
         }
@@ -330,7 +329,7 @@ async fn main() -> anyhow::Result<()> {
             println!(
                 "{}",
                 responses
-                    .format_to_string(stdout_format)
+                    .to_format_option(&stdout_format)
                     .unwrap_or(String::from("Couldn't generate response string."))
             );
         } else {
@@ -351,7 +350,7 @@ async fn main() -> anyhow::Result<()> {
             println!(
                 "{}",
                 responses
-                    .format_to_string(stdout_format)
+                    .to_format_option(&stdout_format)
                     .unwrap_or(String::from("Generating string failed."))
             );
         }
