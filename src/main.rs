@@ -124,6 +124,28 @@ async fn main() -> anyhow::Result<()> {
                 .action(clap::ArgAction::SetTrue),
         )
         .arg(
+            Arg::new("query-cache")
+                .short('c')
+                .long("query-cache")
+                .help("Will cache queries on disk.")
+                .action(clap::ArgAction::SetTrue),
+        )
+        .arg(
+            Arg::new("in-memory")
+                .short('m')
+                .long("in-memory")
+                .help("Will use an in memory SurrealDB instance instead of on disk.")
+                .action(clap::ArgAction::SetTrue),
+        )
+        .arg(
+            Arg::new("cache-path")
+                .short('C')
+                .long("cache-path")
+                .help("Sets the path of the on disk DB cache. Does nothing if specified with -m.")
+                .action(clap::ArgAction::Set),
+        )
+        .arg(
+
             Arg::new("query-string")
                 .short('s')
                 .long("query-string")
