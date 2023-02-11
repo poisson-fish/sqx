@@ -1,6 +1,5 @@
+pub mod converters;
 pub mod traits;
-
-use polars::prelude::*;
 
 use serde_json::Value;
 use traits::structured::{FormatOption, Structured};
@@ -12,10 +11,7 @@ extern crate log;
 
 use std::fs::File;
 use std::io;
-use std::io::BufRead;
 use std::io::BufReader;
-use std::io::Cursor;
-use std::io::StdinLock;
 use std::path::Path;
 
 use clap::{Arg, Command};
@@ -30,6 +26,9 @@ use indicatif::{ProgressBar, ProgressStyle};
 //Use jemalloc on *nix
 #[cfg(not(target_env = "msvc"))]
 use tikv_jemallocator::Jemalloc;
+
+use crate::converters::csv_parse;
+use crate::traits::ser_adapter::SerOutputAdapter;
 
 #[cfg(not(target_env = "msvc"))]
 #[global_allocator]
@@ -216,9 +215,9 @@ async fn main() -> anyhow::Result<()> {
         for file in true_files {
             let handle = File::open(file)
                 .expect(format!("Could not open file: {:#?}", &file.to_path_buf()).as_str());
-            let buf_reader = BufReader::new(handle);
+            let mut buf_reader = BufReader::new(handle);
 
-            let deserialized: serde_json::Value = serde_json::from_reader(buf_reader).unwrap();
+            let deserialized: serde_json::Value = buf_reader.parse_as(&input_format).unwrap();
             debug!("Surreal converted json to: {:#?}", deserialized);
 
             db
@@ -283,58 +282,25 @@ async fn main() -> anyhow::Result<()> {
             .await
             .expect("Failed to change database to stdin.");
 
-    
-
-        let csv_parse = |handle: StdinLock, delim_override: Option<char>| -> Value {
-            let mut buf_reader = BufReader::new(handle);
-            let buf_bytes = buf_reader.fill_buf().unwrap();
-            let mmap = Cursor::new(buf_bytes);
-            if let Some(delim_over) = delim_override {
-                let df: DataFrame = CsvReader::new(mmap)
-                        .with_delimiter(delim_over as u8)
-                        .has_header(true)
-                        .finish()
-                        .expect(format!("Could not parse CSV with delimiter '{}' into DataFrame", delim_over).as_str());
-                    let result = serde_json::to_value(df)
-                        .expect("Converting DataFrame to serde_json::Value failed.");
-                    debug!("DataFrame read to {:#?}", result);
-                    result
-            } else {
-                if let Some(delimiter) = matches.get_one::<String>("input-delimiter") {
-                    let delim = delimiter.chars().next().unwrap();
-                    let df: DataFrame = CsvReader::new(mmap)
-                        .with_delimiter(delim as u8)
-                        .has_header(true)
-                        .finish()
-                        .expect(format!("Could not parse CSV with delimiter '{}' into DataFrame", delim).as_str());
-                    let result = serde_json::to_value(df)
-                        .expect("Converting DataFrame to serde_json::Value failed.");
-                    debug!("DataFrame read to {:#?}", result);
-                    result
-                } else {
-                    let df: DataFrame = CsvReader::new(mmap)
-                        .finish()
-                        .expect("Could not parse CSV with delimiter ',' into DataFrame");
-                    let result = serde_json::to_value(df)
-                        .expect("Converting DataFrame to serde_json::Value failed.");
-                    debug!("DataFrame read to {:#?}", result);
-                    result
-                }
-            }
-        };
-
         let stdin = io::stdin();
-        let handle = stdin.lock();
 
         let value: Value = match input_format {
             FormatOption::JSON => {
+                let handle = stdin.lock();
                 let buf_reader = BufReader::new(handle);
                 serde_json::from_reader(buf_reader).unwrap()
             }
 
-            FormatOption::CSV => csv_parse(handle, None),
-
-            FormatOption::TSV => csv_parse(handle, Some('\t')),
+            FormatOption::CSV => {
+                let handle = stdin.lock();
+                let mut buf_reader = BufReader::new(handle);
+                csv_parse(&mut buf_reader, matches.get_one::<char>("input-delimiter")).unwrap()
+            }
+            FormatOption::TSV => {
+                let handle = stdin.lock();
+                let mut buf_reader = BufReader::new(handle);
+                csv_parse(&mut buf_reader, Some(&'\t')).unwrap()
+            }
             FormatOption::ARROW => todo!(),
             FormatOption::TABLED => todo!(),
         };
