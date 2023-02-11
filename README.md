@@ -178,8 +178,8 @@ _For more specific and powerful query language examples, please refer to the [Su
 - [x] Blob filepath input
 - [ ] Multiformat ingest support
     - [x] JSON
-    - [ ] TSV
-    - [ ] CSV
+    - [x] TSV
+    - [x] CSV
     - [ ] Arrow
     - [ ] Raw posix tool output parsers
 - [ ] Multiformat export support
