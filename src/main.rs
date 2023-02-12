@@ -2,21 +2,23 @@ pub mod converters;
 pub mod traits;
 
 use serde_json::Value;
+use uuid::Uuid;
 
 extern crate env_logger;
 extern crate pretty_env_logger;
 #[macro_use]
 extern crate log;
 
+use std::env::temp_dir;
 use std::fs::File;
 use std::io;
 use std::io::BufReader;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use clap::{Arg, Command};
 use log::LevelFilter;
 
-use surrealdb::engine::local::Mem;
+use surrealdb::engine::local::{Mem, Db};
 use surrealdb::sql::statements::{BeginStatement, CommitStatement};
 use surrealdb::*;
 
@@ -124,18 +126,25 @@ async fn main() -> anyhow::Result<()> {
                 .action(clap::ArgAction::SetTrue),
         )
         .arg(
-            Arg::new("query-cache")
+            Arg::new("caching")
                 .short('c')
-                .long("query-cache")
-                .help("Will cache queries on disk.")
+                .long("caching")
+                .help("Enables query caching. Will cache on ")
                 .action(clap::ArgAction::SetTrue),
         )
         .arg(
-            Arg::new("in-memory")
+            Arg::new("file-backed")
                 .short('m')
-                .long("in-memory")
-                .help("Will use an in memory SurrealDB instance instead of on disk.")
+                .long("file-backed")
+                .help("Will use an on disk SurrealDB instance instead of in memory.")
                 .action(clap::ArgAction::SetTrue),
+        )
+        .arg(
+            Arg::new("db-filepath")
+                .short('M')
+                .long("db-filepath")
+                .help("Specify a filepath to use as the backing SurrealDB database file. For use in conjunction with -m")
+                .action(clap::ArgAction::Set),
         )
         .arg(
             Arg::new("cache-path")
@@ -188,6 +197,7 @@ async fn main() -> anyhow::Result<()> {
         "File Input format is {:#?}, Stdin format is {:#?}, output format {:#?}",
         fileout_format, input_format, stdout_format
     );
+
     //Spin up logger
     builder
         .filter_level(verbosity.0)
@@ -196,8 +206,27 @@ async fn main() -> anyhow::Result<()> {
 
     info!("Using debug logging level: [{}]", verbosity.1);
 
+    let temp_root = match matches.get_one::<String>("cache-path") {
+            Some(user_path) => Path::new(user_path),
+            None => &Path::join(&temp_dir(),PathBuf::from("/sqx"))
+    };
+    
     // Spin up the database
-    let db = Surreal::new::<Mem>(()).await?;
+    static DB: Surreal<Db> = Surreal::init();
+    
+    if matches.get_count("file-backed") > 0 {
+        let db_path = match matches.get_one("db-filepath") {
+            Some(db_userpath) => Path::new(db_userpath),
+            None => {
+                // generate a uuid filename
+                let uuid = Uuid::new_v4();
+                &Path::join(temp_root,PathBuf::from(std::format!("{}.db",uuid.to_string())))
+            }
+        };
+        DB.connect::<File>(&"test").await?;
+    } else {
+        DB.connect::<Mem>(()).await?;
+    };    
 
     info!("In memory datastore initialized.");
 

@@ -46,6 +46,7 @@ where
     }
 }
 impl IntoSerde for DataFrame {
+    // this sucks
     fn to_serde(&mut self) -> Result<Value, Error> {
         let mut buffer = Vec::new();
 
