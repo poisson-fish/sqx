@@ -44,7 +44,7 @@ async fn main() -> anyhow::Result<()> {
         .allow_hyphen_values(true)
         .arg(
             Arg::new("log-timestamp")
-                .short('t')
+                .short('T')
                 .help("Timestamp log, self output")
                 .action(clap::ArgAction::Count),
         )
@@ -241,7 +241,7 @@ async fn main() -> anyhow::Result<()> {
         DB.use_ns("namespace")
             .use_db("filein")
             .await
-            .expect("Failed to change database to filein.");
+            .expect("Failed to change database table.");
 
         let true_files: Vec<&Path> = flags
             .filter_map(|str_path| {
@@ -335,7 +335,7 @@ async fn main() -> anyhow::Result<()> {
         DB.use_ns("namespace")
             .use_db("stdin")
             .await
-            .expect("Failed to change database to stdin.");
+            .expect("Failed to change database table.");
 
         let value: Option<Value> = match input_format {
             FormatOption::JSON => {
@@ -366,12 +366,13 @@ async fn main() -> anyhow::Result<()> {
 
         if let Some(some_value) = value {
             let results = DB
-                .query("INSERT INTO stdin $obj")
+                .query(BeginStatement)
+                .query("INSERT INTO stdin $obj;")
                 .bind(("obj", some_value))
+                .query(CommitStatement)
                 .await?;
             debug!("INSERT resulted in: {:#?}", results);
         }
-
         if let Some(sql_statement) = matches.get_one::<String>("query-string") {
             let mut response = DB
                 // Start transaction
