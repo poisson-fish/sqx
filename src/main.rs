@@ -287,7 +287,7 @@ async fn main() -> anyhow::Result<()> {
                 .expect("DB Insertion failed");
             bar.inc(1);
         }
-        bar.finish_with_message("done");
+        bar.finish_and_clear();
         if let Some(sql_statement) = matches.get_one::<String>("query-string") {
             let mut response = DB
                 // Start transaction
