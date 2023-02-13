@@ -9,7 +9,6 @@ extern crate pretty_env_logger;
 #[macro_use]
 extern crate log;
 
-use std::env::temp_dir;
 use std::fs::File;
 use std::io;
 use std::io::BufReader;
@@ -18,7 +17,7 @@ use std::path::{Path, PathBuf};
 use clap::{Arg, Command};
 use log::LevelFilter;
 
-use surrealdb::engine::local::{Mem, Db};
+use surrealdb::engine::local::{Db, Mem, RocksDb};
 use surrealdb::sql::statements::{BeginStatement, CommitStatement};
 use surrealdb::*;
 
@@ -166,10 +165,11 @@ async fn main() -> anyhow::Result<()> {
     //Match for verbosity level from args
     let verbosity = match matches.get_count("verbosity") {
         0 => (LevelFilter::Off, "none"),
-        1 => (LevelFilter::Error, "error"),
-        2 => (LevelFilter::Warn, "warn"),
-        3 => (LevelFilter::Debug, "debug"),
-        4 => (LevelFilter::Trace, "trace"),
+        1 => (LevelFilter::Info, "info"),
+        2 => (LevelFilter::Error, "error"),
+        3 => (LevelFilter::Warn, "warn"),
+        4 => (LevelFilter::Debug, "debug"),
+        5 => (LevelFilter::Trace, "trace"),
         _ => (LevelFilter::Info, "info"),
     };
 
@@ -206,34 +206,39 @@ async fn main() -> anyhow::Result<()> {
 
     info!("Using debug logging level: [{}]", verbosity.1);
 
-    let temp_root = match matches.get_one::<String>("cache-path") {
-            Some(user_path) => Path::new(user_path),
-            None => &Path::join(&temp_dir(),PathBuf::from("/sqx"))
+    let temp_root: PathBuf = match matches.get_one::<String>("cache-path") {
+        Some(user_path) => PathBuf::from(user_path),
+        None => {
+            let tempdir = std::env::temp_dir();
+            info!("Using temp_dir: {}", tempdir.to_str().unwrap());
+            tempdir.join("sqx")
+        }
     };
-    
+    info!("Using cache path: {}", temp_root.to_str().unwrap());
     // Spin up the database
     static DB: Surreal<Db> = Surreal::init();
-    
-    if matches.get_count("file-backed") > 0 {
-        let db_path = match matches.get_one("db-filepath") {
-            Some(db_userpath) => Path::new(db_userpath),
+
+    if matches.contains_id("file-backed") {
+        let db_path = match matches.get_one::<String>("db-filepath") {
+            Some(db_userpath) => PathBuf::from(db_userpath),
             None => {
                 // generate a uuid filename
                 let uuid = Uuid::new_v4();
-                &Path::join(temp_root,PathBuf::from(std::format!("{}.db",uuid.to_string())))
+                temp_root.join(PathBuf::from(uuid.to_string()))
             }
         };
-        DB.connect::<File>(&"test").await?;
+        let str_path = format!("{}", db_path.to_str().unwrap());
+        DB.connect::<RocksDb>(str_path.as_str()).await?;
+        info!("On disk datastore initialized at: {}", str_path);
     } else {
         DB.connect::<Mem>(()).await?;
-    };    
-
-    info!("In memory datastore initialized.");
+        info!("In memory datastore initialized.");
+    };
 
     // Iter of all file input sources besides stdin taking into account glob paths
     if let Some(flags) = matches.get_many::<String>("input-path") {
         // We got input files
-        db.use_ns("namespace")
+        DB.use_ns("namespace")
             .use_db("filein")
             .await
             .expect("Failed to change database to filein.");
@@ -270,7 +275,7 @@ async fn main() -> anyhow::Result<()> {
             let deserialized: serde_json::Value = buf_reader.parse_serde(&input_format).unwrap();
             debug!("Surreal converted json to: {:#?}", deserialized);
 
-            db
+            DB
                 // Start transaction
                 .query(BeginStatement)
                 // Insert input data
@@ -284,7 +289,7 @@ async fn main() -> anyhow::Result<()> {
         }
         bar.finish_with_message("done");
         if let Some(sql_statement) = matches.get_one::<String>("query-string") {
-            let mut response = db
+            let mut response = DB
                 // Start transaction
                 .query(BeginStatement)
                 // Insert statement
@@ -304,7 +309,7 @@ async fn main() -> anyhow::Result<()> {
             );
         } else {
             info!("No SQL string provided, selecting ALL from filein.");
-            let mut response = db
+            let mut response = DB
                 // Start transaction
                 .query(BeginStatement)
                 // Default Query
@@ -327,45 +332,48 @@ async fn main() -> anyhow::Result<()> {
     } else {
         //Stdin
 
-        db.use_ns("namespace")
+        DB.use_ns("namespace")
             .use_db("stdin")
             .await
             .expect("Failed to change database to stdin.");
 
-        let stdin = io::stdin();
-
-        let value: Value = match input_format {
+        let value: Option<Value> = match input_format {
             FormatOption::JSON => {
+                let stdin = io::stdin();
                 let handle = stdin.lock();
                 let buf_reader = BufReader::new(handle);
                 serde_json::from_reader(buf_reader).unwrap()
             }
 
             FormatOption::CSV => {
+                let stdin = io::stdin();
                 let handle = stdin.lock();
                 let mut buf_reader = BufReader::new(handle);
-                csv_parse(&mut buf_reader, matches.get_one::<char>("input-delimiter")).unwrap()
+                csv_parse(&mut buf_reader, matches.get_one::<char>("input-delimiter")).ok()
             }
             FormatOption::TSV => {
+                let stdin = io::stdin();
                 let handle = stdin.lock();
                 let mut buf_reader = BufReader::new(handle);
-                csv_parse(&mut buf_reader, Some(&'\t')).unwrap()
+                csv_parse(&mut buf_reader, Some(&'\t')).ok()
             }
+            FormatOption::NONE => None,
             FormatOption::ARROW => todo!(),
             FormatOption::TABLED => todo!(),
         };
 
-        debug!("Surreal converted json to: {:#?}", value);
+        debug!("Converted json to: {:#?}", value);
 
-        let sql = surrealdb::sql! {
-            INSERT INTO stdin $obj
-        };
-
-        let results = db.query(sql).bind(("obj", value)).await?;
-        debug!("INSERT resulted in: {:#?}", results);
+        if let Some(some_value) = value {
+            let results = DB
+                .query("INSERT INTO stdin $obj")
+                .bind(("obj", some_value))
+                .await?;
+            debug!("INSERT resulted in: {:#?}", results);
+        }
 
         if let Some(sql_statement) = matches.get_one::<String>("query-string") {
-            let mut response = db
+            let mut response = DB
                 // Start transaction
                 .query(BeginStatement)
                 // Begin statement
@@ -385,7 +393,7 @@ async fn main() -> anyhow::Result<()> {
             );
         } else {
             info!("No SQL string provided, selecting ALL from stdin.");
-            let mut response = db
+            let mut response = DB
                 // Start transaction
                 .query(BeginStatement)
                 // Default query

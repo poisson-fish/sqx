@@ -15,6 +15,7 @@ pub enum FormatOption {
     TSV,
     ARROW,
     TABLED,
+    NONE,
 }
 
 pub trait ParseSerde {
@@ -42,6 +43,7 @@ where
             FormatOption::TSV => csv_parse(self, Some(&'\t')),
             FormatOption::ARROW => todo!(),
             FormatOption::TABLED => todo!(),
+            FormatOption::NONE => todo!(),
         };
     }
 }
@@ -74,6 +76,7 @@ impl FromSerde for serde_json::Value {
             FormatOption::CSV => todo!(),
             FormatOption::TSV => todo!(),
             FormatOption::ARROW => todo!(),
+            FormatOption::NONE => Err(()),
             FormatOption::TABLED => value_to_table(self, None),
         }
     }
