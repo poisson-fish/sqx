@@ -1,7 +1,8 @@
 pub mod converters;
 pub mod traits;
 
-use serde_json::Value;
+use serde_json::Value::{self, Array};
+use surrealdb::engine::any::Any;
 use uuid::Uuid;
 
 extern crate env_logger;
@@ -9,7 +10,6 @@ extern crate pretty_env_logger;
 #[macro_use]
 extern crate log;
 
-use std::fs::File;
 use std::io;
 use std::io::BufReader;
 use std::path::{Path, PathBuf};
@@ -17,22 +17,21 @@ use std::path::{Path, PathBuf};
 use clap::{Arg, Command};
 use log::LevelFilter;
 
-use surrealdb::engine::local::{Db, Mem, RocksDb};
 use surrealdb::sql::statements::{BeginStatement, CommitStatement};
 use surrealdb::*;
 
 use indicatif::{ProgressBar, ProgressStyle};
 
 //Use jemalloc on *nix
-#[cfg(not(target_env = "msvc"))]
-use tikv_jemallocator::Jemalloc;
+// #[cfg(not(target_env = "msvc"))]
+// use tikv_jemallocator::Jemalloc;
 
 use crate::converters::csv_parse;
 use crate::traits::ser_adapter::{FormatOption, FromSerde, ParseSerde};
 
-#[cfg(not(target_env = "msvc"))]
-#[global_allocator]
-static GLOBAL: Jemalloc = Jemalloc;
+// #[cfg(not(target_env = "msvc"))]
+// #[global_allocator]
+// static GLOBAL: Jemalloc = Jemalloc;
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
@@ -186,6 +185,7 @@ async fn main() -> anyhow::Result<()> {
             "TSV" => FormatOption::TSV,
             "ARROW" => FormatOption::ARROW,
             "TABLED" => FormatOption::TABLED,
+            "NONE" => FormatOption::NONE,
             _ => default,
         },
         None => default,
@@ -216,7 +216,7 @@ async fn main() -> anyhow::Result<()> {
     };
     info!("Using cache path: {}", temp_root.to_str().unwrap());
     // Spin up the database
-    static DB: Surreal<Db> = Surreal::init();
+    static DB: Surreal<Any> = Surreal::init();
 
     if matches.contains_id("file-backed") {
         let db_path = match matches.get_one::<String>("db-filepath") {
@@ -227,11 +227,11 @@ async fn main() -> anyhow::Result<()> {
                 temp_root.join(PathBuf::from(uuid.to_string()))
             }
         };
-        let str_path = format!("{}", db_path.to_str().unwrap());
-        DB.connect::<RocksDb>(str_path.as_str()).await?;
+        let str_path = format!("file://{}", db_path.to_str().unwrap());
+        DB.connect(str_path.as_str()).await?;
         info!("On disk datastore initialized at: {}", str_path);
     } else {
-        DB.connect::<Mem>(()).await?;
+        DB.connect("mem://").await?;
         info!("In memory datastore initialized.");
     };
 
@@ -268,7 +268,7 @@ async fn main() -> anyhow::Result<()> {
         );
 
         for file in true_files {
-            let handle = File::open(file)
+            let handle = std::fs::File::open(file)
                 .expect(format!("Could not open file: {:#?}", &file.to_path_buf()).as_str());
             let mut buf_reader = BufReader::new(handle);
 
@@ -299,7 +299,7 @@ async fn main() -> anyhow::Result<()> {
                 .await?;
 
             let responses: serde_json::Value =
-                serde_json::Value::Array(response.take(0).expect("Couldn't deserialize response."));
+                Array(response.take(0).expect("Couldn't deserialize response."));
 
             println!(
                 "{}",
@@ -320,7 +320,7 @@ async fn main() -> anyhow::Result<()> {
                 .await?;
 
             let responses: serde_json::Value =
-                serde_json::Value::Array(response.take(0).expect("Couldn't deserialize response."));
+                Array(response.take(0).expect("Couldn't deserialize response."));
 
             println!(
                 "{}",
@@ -383,8 +383,9 @@ async fn main() -> anyhow::Result<()> {
                 .query(CommitStatement)
                 .await?;
 
-            let responses: serde_json::Value =
-                serde_json::Value::Array(response.take(0).expect("Couldn't deserialize response."));
+            let db_out = response.take(0).expect("Couldn't get a response.");
+            let responses =
+                Array(db_out);
 
             println!(
                 "{}",
@@ -399,13 +400,13 @@ async fn main() -> anyhow::Result<()> {
                 .query(BeginStatement)
                 // Default query
                 .query("SELECT * FROM $table;")
-                .bind(("table", "stdin"))
+                .bind(("table", "filein"))
                 // Finalise
                 .query(CommitStatement)
                 .await?;
 
             let responses: serde_json::Value =
-                serde_json::Value::Array(response.take(0).expect("Couldn't deserialize response."));
+                Array(response.take(0).expect("Couldn't deserialize response."));
 
             println!(
                 "{}",
@@ -415,6 +416,5 @@ async fn main() -> anyhow::Result<()> {
             );
         }
     };
-
     Ok(())
 }
