@@ -1,0 +1,51 @@
+{
+    // Use IntelliSense to learn about possible attributes.
+    // Hover to view descriptions of existing attributes.
+    // For more information, visit: https://go.microsoft.com/fwlink/?linkid=830387
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "type": "lldb",
+            "request": "launch",
+            "name": "Debug executable 'sqx'",
+            "cargo": {
+                "args": [
+                    "build",
+                    "--bin=sqx",
+                    "--package=sqx"
+                ],
+                "filter": {
+                    "name": "sqx",
+                    "kind": "bin"
+                }
+            },
+            "args": [
+                "-v",
+                "-m",
+                "-M/tmp/sqx/25e792a6-d726-42ed-bd17-2d0e60d2d2cb/",
+                "-iNONE",
+                "-FTABLED",
+            ],
+            "cwd": "${workspaceFolder}"
+        },
+        {
+            "type": "lldb",
+            "request": "launch",
+            "name": "Debug unit tests in executable 'sqx'",
+            "cargo": {
+                "args": [
+                    "test",
+                    "--no-run",
+                    "--bin=sqx",
+                    "--package=sqx"
+                ],
+                "filter": {
+                    "name": "sqx",
+                    "kind": "bin"
+                }
+            },
+            "args": [],
+            "cwd": "${workspaceFolder}"
+        }
+    ]
+}
