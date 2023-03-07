@@ -18,7 +18,6 @@ use atty::Stream;
 use clap::{Arg, Command};
 use log::LevelFilter;
 
-use surrealdb::sql::statements::{BeginStatement, CommitStatement};
 use surrealdb::*;
 
 use indicatif::{ProgressBar, ProgressStyle};
@@ -236,6 +235,11 @@ async fn main() -> anyhow::Result<()> {
         info!("In memory datastore initialized.");
     };
 
+    DB.use_ns("sqx")
+        .use_db("sqx")
+        .await
+        .expect("Failed to change database table.");
+
     // Iter of all file input sources besides stdin taking into account glob paths
     if let Some(flags) = matches.get_many::<String>("input-path") {
         // We got input files
@@ -262,11 +266,6 @@ async fn main() -> anyhow::Result<()> {
             .unwrap()
             .progress_chars("##-"),
         );
-
-        DB.use_ns("sqx")
-            .use_db("sqx")
-            .await
-            .expect("Failed to change database table.");
 
         for file in true_files {
             let handle = std::fs::File::open(file)
@@ -317,10 +316,6 @@ async fn main() -> anyhow::Result<()> {
         debug!("Converted json to: {:#?}", value);
 
         if let Some(some_value) = value {
-            DB.use_ns("sqx")
-                .use_db("sqx")
-                .await
-                .expect("Failed to change database table.");
             let results = DB
                 .query("INSERT INTO stdin $obj;")
                 .bind(("obj", some_value))
@@ -328,11 +323,6 @@ async fn main() -> anyhow::Result<()> {
             debug!("INSERT resulted in: {:#?}", results);
         }
     }
-
-    DB.use_ns("sqx")
-        .use_db("sqx")
-        .await
-        .expect("Failed to change database table.");
 
     let default_query = String::from("SELECT * FROM $table;");
     let query_string = matches
