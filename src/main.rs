@@ -14,6 +14,7 @@ use std::io;
 use std::io::BufReader;
 use std::path::{Path, PathBuf};
 
+use atty::Stream;
 use clap::{Arg, Command};
 use log::LevelFilter;
 
@@ -218,7 +219,7 @@ async fn main() -> anyhow::Result<()> {
     // Spin up the database
     static DB: Surreal<Any> = Surreal::init();
 
-    if matches.contains_id("file-backed") {
+    if matches.get_flag("file-backed") {
         let db_path = match matches.get_one::<String>("db-filepath") {
             Some(db_userpath) => PathBuf::from(db_userpath),
             None => {
@@ -231,18 +232,13 @@ async fn main() -> anyhow::Result<()> {
         DB.connect(str_path.as_str()).await?;
         info!("On disk datastore initialized at: {}", str_path);
     } else {
-        DB.connect("mem://").await?;
+        DB.connect("mem").await?;
         info!("In memory datastore initialized.");
     };
 
     // Iter of all file input sources besides stdin taking into account glob paths
     if let Some(flags) = matches.get_many::<String>("input-path") {
         // We got input files
-        DB.use_ns("namespace")
-            .use_db("filein")
-            .await
-            .expect("Failed to change database table.");
-
         let true_files: Vec<&Path> = flags
             .filter_map(|str_path| {
                 let path = Path::new(str_path);
@@ -267,6 +263,11 @@ async fn main() -> anyhow::Result<()> {
             .progress_chars("##-"),
         );
 
+        DB.use_ns("sqx")
+            .use_db("sqx")
+            .await
+            .expect("Failed to change database table.");
+
         for file in true_files {
             let handle = std::fs::File::open(file)
                 .expect(format!("Could not open file: {:#?}", &file.to_path_buf()).as_str());
@@ -276,67 +277,18 @@ async fn main() -> anyhow::Result<()> {
             debug!("Surreal converted json to: {:#?}", deserialized);
 
             DB
-                // Start transaction
-                .query(BeginStatement)
                 // Insert input data
                 .query("INSERT INTO filein $obj;")
                 .bind(("obj", deserialized))
                 // Finalise
-                .query(CommitStatement)
                 .await
                 .expect("DB Insertion failed");
             bar.inc(1);
         }
         bar.finish_and_clear();
-        if let Some(sql_statement) = matches.get_one::<String>("query-string") {
-            let mut response = DB
-                // Start transaction
-                .query(BeginStatement)
-                // Insert statement
-                .query(sql_statement)
-                // Finalise
-                .query(CommitStatement)
-                .await?;
-
-            let responses: serde_json::Value =
-                Array(response.take(0).expect("Couldn't deserialize response."));
-
-            println!(
-                "{}",
-                responses
-                    .to_format_option(&stdout_format)
-                    .unwrap_or(String::from("Couldn't generate response string."))
-            );
-        } else {
-            info!("No SQL string provided, selecting ALL from filein.");
-            let mut response = DB
-                // Start transaction
-                .query(BeginStatement)
-                // Default Query
-                .query("SELECT * FROM $table;")
-                .bind(("table", "filein"))
-                // Finalise
-                .query(CommitStatement)
-                .await?;
-
-            let responses: serde_json::Value =
-                Array(response.take(0).expect("Couldn't deserialize response."));
-
-            println!(
-                "{}",
-                responses
-                    .to_format_option(&stdout_format)
-                    .unwrap_or(String::from("Couldn't generate response string."))
-            );
-        }
-    } else {
+    }
+    if !atty::is(Stream::Stdin) {
         //Stdin
-
-        DB.use_ns("namespace")
-            .use_db("stdin")
-            .await
-            .expect("Failed to change database table.");
-
         let value: Option<Value> = match input_format {
             FormatOption::JSON => {
                 let stdin = io::stdin();
@@ -365,56 +317,37 @@ async fn main() -> anyhow::Result<()> {
         debug!("Converted json to: {:#?}", value);
 
         if let Some(some_value) = value {
+            DB.use_ns("sqx")
+                .use_db("sqx")
+                .await
+                .expect("Failed to change database table.");
             let results = DB
-                .query(BeginStatement)
                 .query("INSERT INTO stdin $obj;")
                 .bind(("obj", some_value))
-                .query(CommitStatement)
                 .await?;
             debug!("INSERT resulted in: {:#?}", results);
         }
-        if let Some(sql_statement) = matches.get_one::<String>("query-string") {
-            let mut response = DB
-                // Start transaction
-                .query(BeginStatement)
-                // Begin statement
-                .query(sql_statement)
-                // Finalise
-                .query(CommitStatement)
-                .await?;
+    }
 
-            let db_out = response.take(0).expect("Couldn't get a response.");
-            let responses =
-                Array(db_out);
+    DB.use_ns("sqx")
+        .use_db("sqx")
+        .await
+        .expect("Failed to change database table.");
 
-            println!(
-                "{}",
-                responses
-                    .to_format_option(&stdout_format)
-                    .unwrap_or(String::from("Couldn't generate response string."))
-            );
-        } else {
-            info!("No SQL string provided, selecting ALL from stdin.");
-            let mut response = DB
-                // Start transaction
-                .query(BeginStatement)
-                // Default query
-                .query("SELECT * FROM $table;")
-                .bind(("table", "filein"))
-                // Finalise
-                .query(CommitStatement)
-                .await?;
+    let default_query = String::from("SELECT * FROM $table;");
+    let query_string = matches
+        .get_one::<String>("query-string")
+        .unwrap_or(&default_query);
+    let mut response = DB.query(query_string).bind(("table", "filein")).await?;
 
-            let responses: serde_json::Value =
-                Array(response.take(0).expect("Couldn't deserialize response."));
+    let db_out = response.take(0).expect("Couldn't get a response.");
+    let responses = Array(db_out);
 
-            println!(
-                "{}",
-                responses
-                    .to_format_option(&stdout_format)
-                    .unwrap_or(String::from("Generating string failed."))
-            );
-        }
-    };
+    println!(
+        "{}",
+        responses
+            .to_format_option(&stdout_format)
+            .unwrap_or(String::from("Couldn't generate response string."))
+    );
     Ok(())
 }

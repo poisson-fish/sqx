@@ -26,7 +26,7 @@ pub fn value_to_table(
                     serde_json::Value::Null => todo!(),
                     serde_json::Value::Bool(_) => todo!(),
                     serde_json::Value::Number(_) => todo!(),
-                    serde_json::Value::String(_) => todo!(),
+                    serde_json::Value::String(v) => column_build.push(v.to_string()),
                     serde_json::Value::Array(_) => todo!(),
                     serde_json::Value::Object(object_to_row) => {
                         let columns = object_to_row.keys();

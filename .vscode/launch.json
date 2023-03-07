@@ -7,7 +7,7 @@
         {
             "type": "lldb",
             "request": "launch",
-            "name": "Debug executable 'sqx'",
+            "name": "Debug executable 'sqx' with no input file",
             "cargo": {
                 "args": [
                     "build",
@@ -46,6 +46,51 @@
             },
             "args": [],
             "cwd": "${workspaceFolder}"
-        }
+        },
+        {
+            "type": "lldb",
+            "request": "launch",
+            "name": "Debug executable 'sqx' with input file",
+            "cargo": {
+                "args": [
+                    "build",
+                    "--bin=sqx",
+                    "--package=sqx"
+                ],
+                "filter": {
+                    "name": "sqx",
+                    "kind": "bin"
+                }
+            },
+            "args": [
+                "-v",
+                // "-m",
+                // "-M/tmp/sqx/1e4b9b53-e5ea-4b01-b159-2c79793f252c",
+                "-iCSV",
+                "-fTABLED",
+                "--",
+                "target/debug/examples/weather.csv"
+            ],
+            "cwd": "${workspaceFolder}"
+        },
+        {
+            "type": "lldb",
+            "request": "launch",
+            "name": "Debug unit tests in executable 'sqx'",
+            "cargo": {
+                "args": [
+                    "test",
+                    "--no-run",
+                    "--bin=sqx",
+                    "--package=sqx"
+                ],
+                "filter": {
+                    "name": "sqx",
+                    "kind": "bin"
+                }
+            },
+            "args": [],
+            "cwd": "${workspaceFolder}"
+        },
     ]
 }
