@@ -286,7 +286,7 @@ async fn main() -> anyhow::Result<()> {
         }
         bar.finish_and_clear();
     }
-    if !atty::is(Stream::Stdin) {
+    if atty::isnt(Stream::Stdin) {
         //Stdin
         let value: Option<Value> = match input_format {
             FormatOption::JSON => {
