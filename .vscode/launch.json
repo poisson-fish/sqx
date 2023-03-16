@@ -66,10 +66,12 @@
                 "-v",
                 // "-m",
                 // "-M/tmp/sqx/1e4b9b53-e5ea-4b01-b159-2c79793f252c",
-                "-iCSV",
+                "-t",
+                "filein",
+                "-iPS",
                 "-fTABLED",
                 "--",
-                "target/debug/examples/weather.csv"
+                "target/debug/examples/ps.out"
             ],
             "cwd": "${workspaceFolder}"
         },
