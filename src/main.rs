@@ -1,5 +1,7 @@
 pub mod converters;
 pub mod traits;
+pub mod parsers;
+use crate::parsers::ps::*;
 
 use serde_json::Value::{self, Array};
 use surrealdb::engine::any::Any;
@@ -10,7 +12,7 @@ extern crate pretty_env_logger;
 #[macro_use]
 extern crate log;
 
-use std::io;
+use std::io::{self, Read};
 use std::io::BufReader;
 use std::path::{Path, PathBuf};
 
@@ -159,6 +161,14 @@ async fn main() -> anyhow::Result<()> {
                 .help("A SurrealQL query to run against the data.")
                 .action(clap::ArgAction::Set),
         )
+        .arg(
+
+            Arg::new("query-table")
+                .short('t')
+                .long("query-table")
+                .help("The table to run the query against, defaults to filein. [filein, stdin]")
+                .action(clap::ArgAction::Set),
+        )
         .get_matches_from(wild::args());
 
     //Match for verbosity level from args
@@ -185,6 +195,7 @@ async fn main() -> anyhow::Result<()> {
             "TSV" => FormatOption::TSV,
             "ARROW" => FormatOption::ARROW,
             "TABLED" => FormatOption::TABLED,
+            "PS" => FormatOption::PS,
             "NONE" => FormatOption::NONE,
             _ => default,
         },
@@ -231,7 +242,7 @@ async fn main() -> anyhow::Result<()> {
         DB.connect(str_path.as_str()).await?;
         info!("On disk datastore initialized at: {}", str_path);
     } else {
-        DB.connect("mem").await?;
+        DB.connect("memory").await?;
         info!("In memory datastore initialized.");
     };
 
@@ -311,6 +322,13 @@ async fn main() -> anyhow::Result<()> {
             FormatOption::NONE => None,
             FormatOption::ARROW => todo!(),
             FormatOption::TABLED => todo!(),
+            FormatOption::PS => {
+                let mut buffer = String::new();
+                io::stdin().read_to_string(&mut buffer)?;
+                let as_json = PsParser::new(buffer).parse().ok();
+                info!("Table converted to json is: \n{:#?}",as_json);
+                as_json
+            },
         };
 
         debug!("Converted json to: {:#?}", value);
@@ -325,10 +343,15 @@ async fn main() -> anyhow::Result<()> {
     }
 
     let default_query = String::from("SELECT * FROM $table;");
+    let default_table = String::from("filein");
     let query_string = matches
         .get_one::<String>("query-string")
         .unwrap_or(&default_query);
-    let mut response = DB.query(query_string).bind(("table", "filein")).await?;
+    let query_table = matches
+        .get_one::<String>("query-table")
+        .unwrap_or(&default_table);
+    
+    let mut response = DB.query(query_string).bind(("table", query_table)).await?;
 
     let db_out = response.take(0).expect("Couldn't get a response.");
     let responses = Array(db_out);

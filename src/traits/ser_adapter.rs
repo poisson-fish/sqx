@@ -2,9 +2,11 @@ use std::io::{BufReader, Read};
 
 use polars::prelude::{DataFrame, JsonFormat, JsonWriter};
 use polars_io::SerWriter;
-use serde_json::{Error, Value};
+use serde_json::{ Value};
+use anyhow::{Error};
 
 use crate::converters::csv_parse;
+use crate::parsers::universal::simple_table_parse;
 
 use super::tabled::value_to_table;
 
@@ -15,6 +17,7 @@ pub enum FormatOption {
     TSV,
     ARROW,
     TABLED,
+    PS,
     NONE,
 }
 
@@ -36,7 +39,7 @@ where
 {
     fn parse_serde(&mut self, format: &FormatOption) -> Result<Value, Error> {
         return match format {
-            FormatOption::JSON => serde_json::from_reader(self),
+            FormatOption::JSON => serde_json::from_reader(self).map_err(Error::msg),
 
             FormatOption::CSV => csv_parse(self, None),
 
@@ -44,6 +47,13 @@ where
             FormatOption::ARROW => todo!(),
             FormatOption::TABLED => todo!(),
             FormatOption::NONE => todo!(),
+            FormatOption::PS => {
+                let mut buffer = String::new();
+                self.read_to_string(&mut buffer).unwrap();
+                let as_json = simple_table_parse(buffer)?;
+                info!("Table converted to json is: \n{:#?}",as_json);
+                Ok(as_json)
+            },
         };
     }
 }
@@ -78,6 +88,7 @@ impl FromSerde for serde_json::Value {
             FormatOption::ARROW => todo!(),
             FormatOption::NONE => Err(()),
             FormatOption::TABLED => value_to_table(self, None),
+            FormatOption::PS => todo!(),
         }
     }
 }

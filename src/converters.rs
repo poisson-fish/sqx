@@ -2,7 +2,8 @@ use std::io::{BufRead, Cursor, Read};
 
 use polars::prelude::{CsvReader, DataFrame};
 use polars_io::SerReader;
-use serde_json::{Error, Value};
+use serde_json::{Value};
+use anyhow::Error;
 
 use crate::traits::ser_adapter::IntoSerde;
 
@@ -33,6 +34,6 @@ pub fn csv_parse<R: Read>(
             .expect("Could not parse CSV with delimiter ',' into DataFrame");
         let result = df.to_serde();
         debug!("DataFrame read to {:#?}", result);
-        result
+        result.map_err(Error::msg)
     }
 }
