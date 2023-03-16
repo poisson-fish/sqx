@@ -1,4 +1,4 @@
-use std::io::{BufReader, Read};
+use std::io::{BufReader, Read, self};
 
 use polars::prelude::{DataFrame, JsonFormat, JsonWriter};
 use polars_io::SerWriter;
@@ -6,7 +6,8 @@ use serde_json::{ Value};
 use anyhow::{Error};
 
 use crate::converters::csv_parse;
-use crate::parsers::universal::simple_table_parse;
+use crate::parsers::netstat::NetstatParser;
+use crate::parsers::ps::PsParser;
 
 use super::tabled::value_to_table;
 
@@ -18,6 +19,7 @@ pub enum FormatOption {
     ARROW,
     TABLED,
     PS,
+    NETSTAT,
     NONE,
 }
 
@@ -49,10 +51,17 @@ where
             FormatOption::NONE => todo!(),
             FormatOption::PS => {
                 let mut buffer = String::new();
-                self.read_to_string(&mut buffer).unwrap();
-                let as_json = simple_table_parse(buffer)?;
+                io::stdin().read_to_string(&mut buffer)?;
+                let as_json = PsParser::new(buffer).parse();
                 info!("Table converted to json is: \n{:#?}",as_json);
-                Ok(as_json)
+                as_json
+            },
+            FormatOption::NETSTAT => {
+                let mut buffer = String::new();
+                io::stdin().read_to_string(&mut buffer)?;
+                let as_json = NetstatParser::new(buffer).parse();
+                info!("Table converted to json is: \n{:#?}",as_json);
+                as_json
             },
         };
     }
@@ -89,6 +98,7 @@ impl FromSerde for serde_json::Value {
             FormatOption::NONE => Err(()),
             FormatOption::TABLED => value_to_table(self, None),
             FormatOption::PS => todo!(),
+            FormatOption::NETSTAT => todo!(),
         }
     }
 }

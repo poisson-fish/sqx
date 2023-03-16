@@ -1,6 +1,7 @@
 pub mod converters;
 pub mod traits;
 pub mod parsers;
+use crate::parsers::netstat::NetstatParser;
 use crate::parsers::ps::*;
 
 use serde_json::Value::{self, Array};
@@ -189,14 +190,15 @@ async fn main() -> anyhow::Result<()> {
     };
 
     let get_format_option = |id: &str, default: FormatOption| match matches.get_one::<String>(id) {
-        Some(value) => match value.as_str() {
-            "JSON" => FormatOption::JSON,
-            "CSV" => FormatOption::CSV,
-            "TSV" => FormatOption::TSV,
-            "ARROW" => FormatOption::ARROW,
-            "TABLED" => FormatOption::TABLED,
-            "PS" => FormatOption::PS,
-            "NONE" => FormatOption::NONE,
+        Some(value) => match value.to_lowercase().as_str() {
+            "json" => FormatOption::JSON,
+            "csv" => FormatOption::CSV,
+            "tsv" => FormatOption::TSV,
+            "arrow" => FormatOption::ARROW,
+            "tabled" => FormatOption::TABLED,
+            "ps" => FormatOption::PS,
+            "netstat" | "ns" => FormatOption::NETSTAT,
+            "none" => FormatOption::NONE,
             _ => default,
         },
         None => default,
@@ -304,7 +306,7 @@ async fn main() -> anyhow::Result<()> {
                 let stdin = io::stdin();
                 let handle = stdin.lock();
                 let buf_reader = BufReader::new(handle);
-                serde_json::from_reader(buf_reader).unwrap()
+                serde_json::from_reader(buf_reader).ok()
             }
 
             FormatOption::CSV => {
@@ -329,6 +331,13 @@ async fn main() -> anyhow::Result<()> {
                 info!("Table converted to json is: \n{:#?}",as_json);
                 as_json
             },
+            FormatOption::NETSTAT => {
+                let mut buffer = String::new();
+                io::stdin().read_to_string(&mut buffer)?;
+                let as_json = NetstatParser::new(buffer).parse().ok();
+                info!("Table converted to json is: \n{:#?}",as_json);
+                as_json
+            }
         };
 
         debug!("Converted json to: {:#?}", value);

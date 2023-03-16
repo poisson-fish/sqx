@@ -43,11 +43,9 @@ pub fn simple_table_parse(data: String) -> Result<Value, Error>
     Ok(Value::Array(rows))
 }
 
-fn _sparse_table_parse<I>(data: I) -> Value
-where
-    I: IntoIterator<Item = String>,
+pub fn sparse_table_parse(data: String) -> Result<Value, Error>
 {
-    let mut data = data.into_iter();
+    let mut data = data.lines();
     let headers: Vec<_> = data
         .next()
         .expect("Input is empty")
@@ -67,5 +65,5 @@ where
         })
         .collect();
 
-    Value::Array(objects)
+    Ok(Value::Array(objects))
 }
