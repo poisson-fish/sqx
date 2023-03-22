@@ -1,4 +1,4 @@
-netstat = { SOI ~ active_connections? ~ active_sockets? ~ EOI }
+netstat = { SOI ~ (active_connections | active_sockets | kernel_routes | kernel_ifaces)+ ~ EOI }
 
 // Active Internet connections (w/o servers)
 active_connections = { "Active Internet connections (w/o servers)" ~ NEWLINE ~ headers ~ NEWLINE ~ active_connection+ }
@@ -13,17 +13,45 @@ state = @{"ESTABLISHED" | "SYN_SENT" | "SYN_RECV" | "FIN_WAIT1" | "FIN_WAIT2" | 
 
 // Active UNIX domain sockets (w/o servers) 
 active_sockets = { "Active UNIX domain sockets (w/o servers)" ~ NEWLINE ~ socket_headers ~ NEWLINE ~ active_socket+ }
-active_socket = { proto ~ WS ~ refcnt ~ WS ~ flags ~ WS ~ type ~ WS ~ state? ~ WS? ~ inode ~ WS ~ path ~ WS? ~ NEWLINE? }
+active_socket = { proto ~ WS ~ refcnt ~ WS ~ socket_flags ~ WS ~ socket_type ~ WS ~ state? ~ WS? ~ inode ~ WS ~ path ~ WS? ~ NEWLINE? }
 socket_headers = { "Proto" ~ WS ~ "RefCnt" ~ WS ~ "Flags" ~ WS ~ "Type" ~ WS ~ "State" ~ WS ~ "I-Node" ~ WS ~ "Path" ~ WS* }
 refcnt = @{ integer }
-flags = @{"[" ~ ANY ~ "]"}
-type = @{ string }
+socket_flags = @{"[" ~ ANY ~ "]"}
+socket_type = @{ string }
 inode = @{ integer }
 path = @{ ("/" ~ (ASCII_ALPHA | ASCII_DIGIT | "/" | "." | "_" | "-" )+) }
 
+// Kernel IP routing table
+kernel_routes = { "Kernel IP routing table" ~ NEWLINE ~ route_headers ~ NEWLINE ~ active_route+ }
+active_route = { dest ~ WS ~ gateway ~ WS ~ genmask ~ WS ~ route_flags ~ WS ~ mss ~ WS? ~ window ~ WS ~ irtt ~ WS ~ iface ~ WS? ~ NEWLINE? }
+route_headers = { "Destination" ~ WS ~ "Gateway" ~ WS ~ "Genmask" ~ WS ~ "Flags" ~ WS ~ "MSS" ~ WS ~ "Window" ~ WS ~ "irtt" ~ WS ~ "Iface" ~ WS* }
+dest = @{ ip_address | service }
+gateway = @{ ip_address | service }
+genmask = @{ ip_address }
+route_flags = @{ string }
+mss = @{ integer }
+window = @{ integer }
+irtt = @{ integer }
+iface = @{ hostname }
+
+// Kernel Interface table
+kernel_ifaces = { "Kernel Interface table" ~ NEWLINE ~ iface_headers ~ NEWLINE ~ active_iface+ }
+active_iface = { iface ~ WS ~ mtu ~ WS ~ rxok ~ WS ~ rxerr ~ WS ~ rxdrp ~ WS? ~ rxovr ~ WS ~ txok ~ WS ~ txerr ~ WS ~ txdrp ~ WS ~ txovr ~ WS ~ iface_flags ~ WS? ~ NEWLINE? }
+iface_headers = { "Iface" ~ WS ~ "MTU" ~ WS ~ "RX-OK" ~ WS ~ "RX-ERR" ~ WS ~ "RX-DRP" ~ WS ~ "RX-OVR" ~ WS ~ "TX-OK" ~ WS ~ "TX-ERR" ~ WS ~ "TX-DRP" ~ WS ~ "TX-OVR" ~ WS ~ "Flg" ~ WS* }
+mtu = @{ integer }
+rxok = @{ integer }
+rxerr = @{ integer }
+rxdrp = @{ integer }
+rxovr = @{ integer }
+txok = @{ integer }
+txerr = @{ integer }
+txdrp = @{ integer }
+txovr = @{ integer }
+iface_flags = @{ string }
+
 // Define additional helper rules
 integer = @{ ASCII_DIGIT+ }
-ip_address = @{ (ASCII_DIGIT ~ "." ~ ASCII_DIGIT ~ "." ~ ASCII_DIGIT ~ "." ~ ASCII_DIGIT)+ }
+ip_address = @{ (ASCII_DIGIT+ ~ "." ~ ASCII_DIGIT+ ~ "." ~ ASCII_DIGIT+ ~ "." ~ ASCII_DIGIT+)+ }
 port = @{ integer{1,5} }
 hostname = @{ (ASCII_ALPHA | ASCII_DIGIT | "-" | ".")+ }
 service = @{ (!(NEWLINE | WS) ~ ASCII_ALPHA | "_")+ }
