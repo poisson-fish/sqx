@@ -25,7 +25,8 @@ polars = { version = "0.27.*", features = ["lazy", "serde","polars-io"], default
 polars-io = { version = "0.27.*", features = ["json", "serde"], default-features=false }
 # database engine
 surrealdb = { git = "https://github.com/surrealdb/surrealdb", features = ["kv-rocksdb", "kv-mem"], default-features = false }
-
+pest = "2.5.*"
+pest_derive = "2.5.*"
 
 # [target.'cfg(not(target_env = "msvc"))'.dependencies]
 # tikv-jemallocator = "0.5.0"

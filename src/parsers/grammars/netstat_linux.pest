@@ -1,0 +1,31 @@
+netstat = { SOI ~ active_connections? ~ active_sockets? ~ EOI }
+
+// Active Internet connections (w/o servers)
+active_connections = { "Active Internet connections (w/o servers)" ~ NEWLINE ~ headers ~ NEWLINE ~ active_connection+ }
+active_connection = { proto ~ WS ~ recv_q ~ WS ~ send_q ~ WS ~ local_address ~ WS ~ foreign_address ~ WS ~ state ~ WS? ~ NEWLINE? }
+headers = { "Proto" ~ WS ~ "Recv-Q" ~ WS ~ "Send-Q" ~ WS ~ "Local Address" ~ WS ~ "Foreign Address" ~ WS ~ "State" ~ WS* }
+proto = @{ string }
+recv_q = @{ integer }
+send_q = @{ integer }
+local_address = { (ip_address | hostname) ~ ":" ~ (port | service) }
+foreign_address = { (ip_address | hostname) ~ ":" ~ (port | service) }
+state = @{"ESTABLISHED" | "SYN_SENT" | "SYN_RECV" | "FIN_WAIT1" | "FIN_WAIT2" | "TIME_WAIT" | "CLOSE" | "CLOSE_WAIT" | "LAST_ACK" | "LISTEN" | "CLOSING" | "CONNECTED" | "" }
+
+// Active UNIX domain sockets (w/o servers) 
+active_sockets = { "Active UNIX domain sockets (w/o servers)" ~ NEWLINE ~ socket_headers ~ NEWLINE ~ active_socket+ }
+active_socket = { proto ~ WS ~ refcnt ~ WS ~ flags ~ WS ~ type ~ WS ~ state? ~ WS? ~ inode ~ WS ~ path ~ WS? ~ NEWLINE? }
+socket_headers = { "Proto" ~ WS ~ "RefCnt" ~ WS ~ "Flags" ~ WS ~ "Type" ~ WS ~ "State" ~ WS ~ "I-Node" ~ WS ~ "Path" ~ WS* }
+refcnt = @{ integer }
+flags = @{"[" ~ ANY ~ "]"}
+type = @{ string }
+inode = @{ integer }
+path = @{ ("/" ~ (ASCII_ALPHA | ASCII_DIGIT | "/" | "." | "_" | "-" )+) }
+
+// Define additional helper rules
+integer = @{ ASCII_DIGIT+ }
+ip_address = @{ (ASCII_DIGIT ~ "." ~ ASCII_DIGIT ~ "." ~ ASCII_DIGIT ~ "." ~ ASCII_DIGIT)+ }
+port = @{ integer{1,5} }
+hostname = @{ (ASCII_ALPHA | ASCII_DIGIT | "-" | ".")+ }
+service = @{ (!(NEWLINE | WS) ~ ASCII_ALPHA | "_")+ }
+string = @{ (!(NEWLINE | WS) ~ ANY)* }
+WS = _{ (" " | "\t")+ } // match spaces and tabs

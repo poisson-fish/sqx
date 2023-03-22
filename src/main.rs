@@ -4,6 +4,10 @@ pub mod parsers;
 use crate::parsers::netstat::NetstatParser;
 use crate::parsers::ps::*;
 
+extern crate pest;
+#[macro_use]
+extern crate pest_derive;
+
 use serde_json::Value::{self, Array};
 use surrealdb::engine::any::Any;
 use uuid::Uuid;
