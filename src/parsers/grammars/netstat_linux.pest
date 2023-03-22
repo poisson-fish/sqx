@@ -1,15 +1,28 @@
-netstat = { SOI ~ (active_connections | active_sockets | kernel_routes | kernel_ifaces)+ ~ EOI }
+netstat = { SOI ~ (active_connections | statistics_start | active_sockets | kernel_routes | kernel_ifaces)+ ~ EOI }
 
-// Active Internet connections (w/o servers)
-active_connections = { "Active Internet connections (w/o servers)" ~ NEWLINE ~ headers ~ NEWLINE ~ active_connection+ }
-active_connection = { proto ~ WS ~ recv_q ~ WS ~ send_q ~ WS ~ local_address ~ WS ~ foreign_address ~ WS ~ state ~ WS? ~ NEWLINE? }
-headers = { "Proto" ~ WS ~ "Recv-Q" ~ WS ~ "Send-Q" ~ WS ~ "Local Address" ~ WS ~ "Foreign Address" ~ WS ~ "State" ~ WS* }
+// Define additional shared helper rules
+path = @{ ("/" ~ (ASCII_ALPHA | ASCII_DIGIT | "/" | "." | "_" | "-" )+) }
+integer = @{ ASCII_DIGIT+ }
+ip_address = @{ (ASCII_DIGIT+ ~ ("."| ":") ~ ASCII_DIGIT+ ~ ("."| ":") ~ ASCII_DIGIT+ ~ ("."| ":") ~ ASCII_DIGIT+)+ }
+port = @{ (integer{1,5} | "*") }
+hostname = @{ (ASCII_ALPHA | ASCII_DIGIT | "-" | ".")+ }
+iface = @{ hostname }
+service = @{ (!(NEWLINE | WS) ~ ASCII_ALPHA | "_" | "*")+ }
+string = @{ (!(NEWLINE | WS) ~ ANY)+ }
+WS = _{ (" " | "\t")+ } // match spaces and tabs
+
+// Active Internet connections (* servers)
+active_connections = { "Active Internet connections (" ~ include_servers ~ " servers)" ~ NEWLINE ~ headers ~ NEWLINE ~ active_connection+ }
+active_connection = { proto ~ WS ~ recv_q ~ WS ~ send_q ~ WS ~ local_address ~ WS ~ foreign_address ~ (WS ~ state)? ~ (WS ~ pid)? ~ WS* ~ NEWLINE? }
+headers = { "Proto" ~ WS ~ "Recv-Q" ~ WS ~ "Send-Q" ~ WS ~ "Local Address" ~ WS ~ "Foreign Address" ~ WS ~ "State" ~ (WS ~ "PID/Program name")? ~ WS? }
 proto = @{ string }
 recv_q = @{ integer }
 send_q = @{ integer }
-local_address = { (ip_address | hostname) ~ ":" ~ (port | service) }
-foreign_address = { (ip_address | hostname) ~ ":" ~ (port | service) }
-state = @{"ESTABLISHED" | "SYN_SENT" | "SYN_RECV" | "FIN_WAIT1" | "FIN_WAIT2" | "TIME_WAIT" | "CLOSE" | "CLOSE_WAIT" | "LAST_ACK" | "LISTEN" | "CLOSING" | "CONNECTED" | "" }
+include_servers = @{ "w/o" | "only" }
+local_address = @{ string }
+foreign_address = @{ string }
+state = @{"ESTABLISHED" | "SYN_SENT" | "SYN_RECV" | "FIN_WAIT1" | "FIN_WAIT2" | "TIME_WAIT" | "CLOSE" | "CLOSE_WAIT" | "LAST_ACK" | "LISTEN" | "CLOSING" | "CONNECTED" }
+pid = { "-" | (integer ~ "/" ~ service) | integer }
 
 // Active UNIX domain sockets (w/o servers) 
 active_sockets = { "Active UNIX domain sockets (w/o servers)" ~ NEWLINE ~ socket_headers ~ NEWLINE ~ active_socket+ }
@@ -19,20 +32,18 @@ refcnt = @{ integer }
 socket_flags = @{"[" ~ ANY ~ "]"}
 socket_type = @{ string }
 inode = @{ integer }
-path = @{ ("/" ~ (ASCII_ALPHA | ASCII_DIGIT | "/" | "." | "_" | "-" )+) }
 
 // Kernel IP routing table
 kernel_routes = { "Kernel IP routing table" ~ NEWLINE ~ route_headers ~ NEWLINE ~ active_route+ }
 active_route = { dest ~ WS ~ gateway ~ WS ~ genmask ~ WS ~ route_flags ~ WS ~ mss ~ WS? ~ window ~ WS ~ irtt ~ WS ~ iface ~ WS? ~ NEWLINE? }
 route_headers = { "Destination" ~ WS ~ "Gateway" ~ WS ~ "Genmask" ~ WS ~ "Flags" ~ WS ~ "MSS" ~ WS ~ "Window" ~ WS ~ "irtt" ~ WS ~ "Iface" ~ WS* }
-dest = @{ ip_address | service }
-gateway = @{ ip_address | service }
-genmask = @{ ip_address }
+dest = @{ string }
+gateway = @{ string }
+genmask = @{ string }
 route_flags = @{ string }
 mss = @{ integer }
 window = @{ integer }
 irtt = @{ integer }
-iface = @{ hostname }
 
 // Kernel Interface table
 kernel_ifaces = { "Kernel Interface table" ~ NEWLINE ~ iface_headers ~ NEWLINE ~ active_iface+ }
@@ -49,11 +60,215 @@ txdrp = @{ integer }
 txovr = @{ integer }
 iface_flags = @{ string }
 
-// Define additional helper rules
-integer = @{ ASCII_DIGIT+ }
-ip_address = @{ (ASCII_DIGIT+ ~ "." ~ ASCII_DIGIT+ ~ "." ~ ASCII_DIGIT+ ~ "." ~ ASCII_DIGIT+)+ }
-port = @{ integer{1,5} }
-hostname = @{ (ASCII_ALPHA | ASCII_DIGIT | "-" | ".")+ }
-service = @{ (!(NEWLINE | WS) ~ ASCII_ALPHA | "_")+ }
-string = @{ (!(NEWLINE | WS) ~ ANY)* }
-WS = _{ (" " | "\t")+ } // match spaces and tabs
+// -s (statistics)
+statistics_start = { ((statistics_ip | statistics_icmp | statistics_tcp | statistics_udp | statistics_tcpext | statistics_ipext | statistics_sctp) ~ NEWLINE*)+ }
+statistics_ip = { 
+            "Ip:" ~ NEWLINE ~ 
+                (WS ~ "Forwarding:" ~ WS ~ ip_forwarding_count ~ WS* ~ NEWLINE)? ~
+                (WS ~ ip_total_packets_rx ~ WS ~ "total packets received" ~ WS* ~ NEWLINE)? ~
+                (WS ~ ip_invalid_address_count ~ WS ~ "with invalid addresses" ~ WS* ~ NEWLINE)? ~
+                (WS ~ ip_forwarded_count ~ WS ~ "forwarded" ~ WS* ~ NEWLINE)? ~
+                (WS ~ ip_unknown_protocol_count ~ WS ~ "with unknown protocol" ~ WS* ~ NEWLINE)? ~
+                (WS ~ ip_rx_discarded_count ~ WS ~ "incoming packets discarded" ~ WS* ~ NEWLINE)? ~
+                (WS ~ ip_rx_delivered_count ~ WS ~ "incoming packets delivered" ~ WS* ~ NEWLINE)? ~
+                (WS ~ ip_tx_request_count ~ WS ~ "requests sent out")? ~ WS*
+}
+statistics_icmp = { 
+            "Icmp:" ~ NEWLINE ~ 
+                (WS ~ icmp_rx_message_count ~ WS ~ "ICMP messages received" ~ WS* ~ NEWLINE)? ~
+                (WS ~ icmp_rx_failed_message_count ~ WS ~ "input ICMP message failed" ~ WS* ~ NEWLINE)? ~
+                (WS ~ "ICMP input histogram:" ~ WS* ~ NEWLINE)? ~
+                    (WS ~ "echo requests:" ~ WS ~ icmp_rx_echo_count ~ WS* ~ NEWLINE)? ~
+                (WS ~ icmp_tx_message_count ~ WS ~ "ICMP messages sent" ~ WS* ~ NEWLINE)? ~
+                (WS ~ icmp_tx_failed_count ~ WS ~ "ICMP messages failed" ~ WS* ~ NEWLINE)? ~
+                (WS ~ "ICMP output histogram:" ~ WS* ~ NEWLINE)? ~
+                    (WS ~ "echo replies:" ~ WS ~ icmp_tx_echo_count ~ WS* ~ NEWLINE)? ~
+            ("IcmpMsg:" ~ NEWLINE ~ 
+                WS ~ "InType8:" ~ WS ~ icmp_rx_type8 ~ WS* ~ NEWLINE ~
+                WS ~ "OutType0:" ~ WS ~ icmp_tx_type0 ~ WS*)?
+        
+}
+statistics_tcp = { 
+    "Tcp:" ~ NEWLINE ~ 
+        (WS ~ tcp_active_connection_openings ~ WS ~ "active connection openings" ~ WS* ~ NEWLINE)? ~
+        (WS ~ tcp_passive_connection_openings ~ WS ~ "passive connection openings" ~ WS* ~ NEWLINE)? ~
+        (WS ~ tcp_failed_connection_attempts ~ WS ~ "failed connection attempts" ~ WS* ~ NEWLINE)? ~
+        (WS ~ tcp_connection_reset_count ~ WS ~ "connection resets received" ~ WS* ~ NEWLINE)? ~
+        (WS ~ tcp_established_connection_count ~ WS ~ "connections established" ~ WS* ~ NEWLINE)? ~
+        (WS ~ tcp_rx_segment_count ~ WS ~ "segments received" ~ WS* ~ NEWLINE)? ~
+        (WS ~ tcp_tx_segment_count ~ WS ~ "segments sent out" ~ WS* ~ NEWLINE)? ~
+        (WS ~ tcp_tx_segment_retry_count ~ WS ~ "segments retransmitted" ~ WS* ~ NEWLINE)? ~
+        (WS ~ tcp_rx_bad_segment_count ~ WS ~ "bad segments received" ~ WS* ~ NEWLINE)? ~
+        (WS ~ tcp_resets_sent ~ WS ~ "resets sent" ~ WS*)? 
+}
+statistics_udp = { 
+    "Udp:" ~ NEWLINE ~ 
+        (WS ~ udp_rx_packet_count ~ WS ~ "packets received" ~ WS* ~ NEWLINE)? ~
+        (WS ~ udp_rx_unknown_port_packet_count ~ WS ~ "packets to unknown port received" ~ WS* ~ NEWLINE)? ~
+        (WS ~ udp_rx_error_count ~ WS ~ "packet receive errors" ~ WS* ~ NEWLINE)? ~
+        (WS ~ udp_tx_packet_count ~ WS ~ "packets sent" ~ WS* ~ NEWLINE)? ~
+        (WS ~ udp_rx_buffer_errors ~ WS ~ "receive buffer errors" ~ WS* ~ NEWLINE)? ~
+        (WS ~ udp_tx_buffer_errors ~ WS ~ "send buffer errors" ~ WS* ~ NEWLINE)? ~
+        (WS ~ "IgnoredMulti:" ~ WS ~ udp_ignored_multi ~ WS* ~ NEWLINE)? ~
+        ("UdpLite:" ~ WS*)? 
+}
+statistics_tcpext = { 
+    "TcpExt:" ~ NEWLINE ~ 
+        (WS ~ tcp_socket_finished_fast_timer ~ WS ~ "TCP sockets finished time wait in fast timer" ~ WS* ~ NEWLINE)? ~
+        (WS ~ tcp_tx_delayed_acks_count ~ WS ~ "delayed acks sent" ~ WS* ~ NEWLINE)? ~
+        (WS ~ tcp_locked_socket_ack_delays ~ WS ~ "delayed acks further delayed because of locked socket" ~ WS* ~ NEWLINE)? ~
+        (WS ~ "Quick ack mode was activated" ~ WS ~ tcp_quick_ack_count ~ WS ~ "times" ~ WS* ~ NEWLINE)? ~
+        (WS ~ tcp_packet_header_predicted_count ~ WS ~ "packet headers predicted" ~ WS* ~ NEWLINE)? ~
+        (WS ~ tcp_empty_payload_ack_count ~ WS ~ "acknowledgments not containing data payload received" ~ WS* ~ NEWLINE)? ~
+        (WS ~ tcp_predicted_ack_count ~ WS ~ "predicted acknowledgments" ~ WS* ~ NEWLINE)? ~
+        (WS ~ "Detected reordering" ~ WS ~ tcp_reordering_count ~ WS ~ "times using SACK" ~ WS* ~ NEWLINE)? ~
+        (WS ~ "TCPLostRetransmit:" ~ WS ~ TCPLostRetransmit ~ WS* ~ NEWLINE)? ~
+        (WS ~ "TCPTimeouts:" ~ WS ~ TCPTimeouts ~ WS* ~ NEWLINE)? ~
+        (WS ~ "TCPLossProbes:" ~ WS ~ TCPLossProbes ~ WS* ~ NEWLINE)? ~
+        (WS ~ "TCPLossProbeRecovery:" ~ WS ~ TCPLossProbeRecovery ~ WS* ~ NEWLINE)? ~
+        (WS ~ "TCPBacklogCoalesce:" ~ WS ~ TCPBacklogCoalesce ~ WS* ~ NEWLINE)? ~
+        (WS ~ "TCPDSACKOldSent:" ~ WS ~ TCPDSACKOldSent ~ WS* ~ NEWLINE)? ~
+        (WS ~ "TCPDSACKRecv:" ~ WS ~ TCPDSACKRecv ~ WS* ~ NEWLINE)? ~
+        (WS ~ tcp_unexpected_data_reset_count ~ WS ~ "connections reset due to unexpected data" ~ WS* ~ NEWLINE)? ~
+        (WS ~ "TCPSACKDiscard:" ~ WS ~ TCPSACKDiscard ~ WS* ~ NEWLINE)? ~
+        (WS ~ "TCPDSACKIgnoredNoUndo:" ~ WS ~ TCPDSACKIgnoredNoUndo ~ WS* ~ NEWLINE)? ~
+        (WS ~ "TCPSackShiftFallback:" ~ WS ~ TCPSackShiftFallback ~ WS* ~ NEWLINE)? ~
+        (WS ~ "TCPRcvCoalesce:" ~ WS ~ TCPRcvCoalesce ~ WS* ~ NEWLINE)? ~
+        (WS ~ "TCPOFOQueue:" ~ WS ~ TCPOFOQueue ~ WS* ~ NEWLINE)? ~
+        (WS ~ "TCPChallengeACK:" ~ WS ~ TCPChallengeACK ~ WS* ~ NEWLINE)? ~
+        (WS ~ "TCPSYNChallenge:" ~ WS ~ TCPSYNChallenge ~ WS* ~ NEWLINE)? ~
+        (WS ~ "TCPAutoCorking:" ~ WS ~ TCPAutoCorking ~ WS* ~ NEWLINE)? ~
+        (WS ~ "TCPSynRetrans:" ~ WS ~ TCPSynRetrans ~ WS* ~ NEWLINE)? ~
+        (WS ~ "TCPOrigDataSent:" ~ WS ~ TCPOrigDataSent ~ WS* ~ NEWLINE)? ~
+        (WS ~ "TCPHystartTrainDetect:" ~ WS ~ TCPHystartTrainDetect ~ WS* ~ NEWLINE)? ~
+        (WS ~ "TCPHystartTrainCwnd:" ~ WS ~ TCPHystartTrainCwnd ~ WS* ~ NEWLINE)? ~
+        (WS ~ "TCPHystartDelayDetect:" ~ WS ~ TCPHystartDelayDetect ~ WS* ~ NEWLINE)? ~
+        (WS ~ "TCPHystartDelayCwnd:" ~ WS ~ TCPHystartDelayCwnd ~ WS* ~ NEWLINE)? ~
+        (WS ~ "TCPKeepAlive:" ~ WS ~ TCPKeepAlive ~ WS* ~ NEWLINE)? ~
+        (WS ~ "TCPDelivered:" ~ WS ~ TCPDelivered ~ WS* ~ NEWLINE)? ~
+        (WS ~ "TcpTimeoutRehash:" ~ WS ~ TcpTimeoutRehash ~ WS* ~ NEWLINE)? ~
+        (WS ~ "TCPDSACKRecvSegs:" ~ WS ~ TCPDSACKRecvSegs ~ WS* ~ NEWLINE)? ~
+        (WS ~ "TCPDSACKIgnoredDubious:" ~ WS ~ TCPDSACKIgnoredDubious ~ WS*)?
+}
+statistics_ipext = { 
+    "IpExt:" ~ NEWLINE ~ 
+        (WS ~ "InMcastPkts:" ~ WS ~ InMcastPkts ~ WS* ~ NEWLINE)? ~
+        (WS ~ "InBcastPkts:" ~ WS ~ InBcastPkts ~ WS* ~ NEWLINE)? ~
+        (WS ~ "InOctets:" ~ WS ~ InOctets ~ WS* ~ NEWLINE)? ~
+        (WS ~ "OutOctets:" ~ WS ~ OutOctets ~ WS* ~ NEWLINE)? ~
+        (WS ~ "InMcastOctets:" ~ WS ~ InMcastOctets ~ WS* ~ NEWLINE)? ~
+        (WS ~ "InBcastOctets:" ~ WS ~ InBcastOctets ~ WS* ~ NEWLINE)? ~
+        (WS ~ "InNoECTPkts:" ~ WS ~ InNoECTPkts ~ WS*)?
+}
+statistics_sctp = { 
+    "Sctp:" ~ NEWLINE ~ 
+        (WS ~ sctp_current_association_count ~ WS ~ "Current Associations" ~ WS* ~ NEWLINE)? ~
+        (WS ~ sctp_active_association_count ~ WS ~ "Active Associations" ~ WS* ~ NEWLINE)? ~
+        (WS ~ sctp_passive_association_count ~ WS ~ "Passive Associations" ~ WS* ~ NEWLINE)? ~
+        (WS ~ sctp_abort_count ~ WS ~ "Number of Aborteds" ~ WS* ~ NEWLINE)? ~
+        (WS ~ sctp_graceful_term_count ~ WS ~ "Number of Graceful Terminations" ~ WS* ~ NEWLINE)? ~
+        (WS ~ sctp_out_of_blue_packet_count ~ WS ~ "Number of Out of Blue packets" ~ WS* ~ NEWLINE)? ~
+        (WS ~ sctp_invalid_checksum_packet_count ~ WS ~ "Number of Packets with invalid Checksum" ~ WS* ~ NEWLINE)? ~
+        (WS ~ sctp_tx_control_chunk_count ~ WS ~ "Number of control chunks sent" ~ WS* ~ NEWLINE)? ~
+        (WS ~ sctp_tx_ordered_chunk_count ~ WS ~ "Number of ordered chunks sent" ~ WS* ~ NEWLINE)? ~
+        (WS ~ sctp_tx_unordered_chunk_count ~ WS ~ "Number of Unordered chunks sent" ~ WS* ~ NEWLINE)? ~
+        (WS ~ sctp_rx_control_chunk_count ~ WS ~ "Number of control chunks received" ~ WS* ~ NEWLINE)? ~
+        (WS ~ sctp_rx_ordered_chunk_count ~ WS ~ "Number of ordered chunks received" ~ WS* ~ NEWLINE)? ~
+        (WS ~ sctp_rx_unordered_chunk_count ~ WS ~ "Number of Unordered chunks received" ~ WS* ~ NEWLINE)? ~
+        (WS ~ sctp_fragmented_msg_count ~ WS ~ "Number of messages fragmented" ~ WS* ~ NEWLINE)? ~
+        (WS ~ sctp_reassembled_msg_count ~ WS ~ "Number of messages reassembled" ~ WS* ~ NEWLINE)? ~
+        (WS ~ sctp_tx_sctp_packet_count ~ WS ~ "Number of SCTP packets sent" ~ WS* ~ NEWLINE)? ~
+        (WS ~ sctp_rx_sctp_packet_count ~ WS ~ "Number of SCTP packets received" ~ WS*)?
+}
+ip_forwarding_count = @{ integer }
+ip_forwarded_count = @{ integer }
+ip_total_packets_rx = @{ integer }
+ip_invalid_address_count = @{ integer }
+ip_unknown_protocol_count = @{ integer }
+ip_rx_discarded_count = @{ integer }
+ip_rx_delivered_count = @{ integer }
+ip_tx_request_count = @{ integer }
+icmp_rx_message_count = @{ integer }
+icmp_rx_failed_message_count = @{ integer }
+icmp_rx_echo_count = @{ integer }
+icmp_tx_message_count = @{ integer }
+icmp_tx_failed_count = @{ integer }
+icmp_tx_echo_count = @{ integer }
+icmp_rx_type8 = @{ integer }
+icmp_tx_type0 = @{ integer }
+tcp_active_connection_openings = @{ integer }
+tcp_passive_connection_openings = @{ integer }
+tcp_failed_connection_attempts = @{ integer }
+tcp_connection_reset_count = @{ integer }
+tcp_established_connection_count = @{ integer }
+tcp_rx_segment_count = @{ integer }
+tcp_tx_segment_count = @{ integer }
+tcp_tx_segment_retry_count = @{ integer }
+tcp_rx_bad_segment_count = @{ integer }
+tcp_resets_sent = @{ integer }
+udp_rx_packet_count = @{ integer }
+udp_rx_unknown_port_packet_count = @{ integer }
+udp_rx_error_count = @{ integer }
+udp_tx_packet_count = @{ integer }
+udp_rx_buffer_errors = @{ integer }
+udp_tx_buffer_errors = @{ integer }
+udp_ignored_multi = @{ integer }
+tcp_socket_finished_fast_timer = @{ integer }
+tcp_tx_delayed_acks_count = @{ integer }
+tcp_locked_socket_ack_delays = @{ integer }
+tcp_quick_ack_count = @{ integer }
+tcp_packet_header_predicted_count = @{ integer }
+tcp_empty_payload_ack_count = @{ integer }
+tcp_predicted_ack_count = @{ integer }
+tcp_reordering_count = @{ integer }
+TCPLostRetransmit = @{ integer }
+TCPTimeouts = @{ integer }
+TCPLossProbes = @{ integer }
+TCPLossProbeRecovery = @{ integer }
+TCPBacklogCoalesce = @{ integer }
+TCPDSACKOldSent = @{ integer }
+TCPDSACKRecv = @{ integer }
+tcp_unexpected_data_reset_count = @{ integer }
+TCPSACKDiscard = @{ integer }
+TCPDSACKIgnoredNoUndo = @{ integer }
+TCPSackShiftFallback = @{ integer }
+TCPRcvCoalesce = @{ integer }
+TCPOFOQueue = @{ integer }
+TCPChallengeACK = @{ integer }
+TCPSYNChallenge = @{ integer }
+TCPAutoCorking= @{ integer }
+TCPSynRetrans = @{ integer }
+TCPOrigDataSent = @{ integer }
+TCPHystartTrainDetect = @{ integer }
+TCPHystartTrainCwnd = @{ integer }
+TCPHystartDelayDetect = @{ integer }
+TCPHystartDelayCwnd = @{ integer }
+TCPKeepAlive = @{ integer }
+TCPDelivered = @{ integer }
+TcpTimeoutRehash = @{ integer }
+TCPDSACKRecvSegs = @{ integer }
+TCPDSACKIgnoredDubious = @{ integer }
+InMcastPkts = @{ integer }
+InBcastPkts = @{ integer }
+InOctets = @{ integer }
+OutOctets = @{ integer }
+InMcastOctets = @{ integer }
+InBcastOctets = @{ integer }
+InNoECTPkts = @{ integer }
+sctp_current_association_count = @{ integer }
+sctp_active_association_count = @{ integer }
+sctp_passive_association_count = @{ integer }
+sctp_abort_count = @{ integer }
+sctp_graceful_term_count = @{ integer }
+sctp_out_of_blue_packet_count = @{ integer }
+sctp_invalid_checksum_packet_count = @{ integer }
+sctp_tx_control_chunk_count = @{ integer }
+sctp_tx_ordered_chunk_count = @{ integer }
+sctp_tx_unordered_chunk_count = @{ integer }
+sctp_rx_control_chunk_count = @{ integer }
+sctp_rx_ordered_chunk_count = @{ integer }
+sctp_rx_unordered_chunk_count = @{ integer }
+sctp_fragmented_msg_count = @{ integer }
+sctp_reassembled_msg_count = @{ integer }
+sctp_tx_sctp_packet_count = @{ integer }
+sctp_rx_sctp_packet_count = @{ integer }
